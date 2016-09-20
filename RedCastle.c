@@ -1,3 +1,4 @@
+#pragma config(Sensor, in1,    gyro,           sensorGyro)
 #pragma config(Motor,  port1,           RBack,         tmotorVex393_HBridge, openLoop)
 #pragma config(Motor,  port2,           RFront,        tmotorVex269_MC29, openLoop)
 #pragma config(Motor,  port9,           LFront,        tmotorVex393_MC29, openLoop, reversed)
@@ -59,19 +60,116 @@ task autonomous()
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
+bool controlActive = false; /* Will be set to true if the control loop is active. */
+bool turning = false;				/* Will be set to true if controlActive && (robot is executing a turn) */
+
+bool startDrive = false;		/* Set to true to request control loop activation. */
+bool startTurn = false;			/* Set to true to request a turn. */
+
+bool controlComplete = false;	/* Will be set to true when the Control Loop has relinquished control of the robot. */
+
+float turnSetpoint = 0;	/* in degrees */
+int driveSetpoint = 0; 	/* in encoder ticks */
+
+/* Internal variables! */
+int driveStartpoint = 0;
+float turnStartpoint = 0;
+
+/* Loop parameters */
+float driveP = 1.0;
+float turnP = 1.0;
+int maxMotorOut = 63;
+
+float turnErrThreshold = 1.0;
+int driveErrThreshold = 5;
+
+int readDriveEncoder() {
+	return -1; // TODO: Replace with actual encoder reading code
+}
+
+/* Gyro positive = clockwise, gyro negative = ccw */
+float readGyro() {
+	float v = (float)SensorValue[gyro];
+	v /= 10;
+	return v;
+}
+
+void resetCL() {
+	controlActive = false;
+	turning = false;
+	
+	controlDone = true;
+
+	turnSetpoint = 0;
+	driveSetpoint = 0;
+	
+	turnStartpoint = 0;
+	driveStartpoint = 0;
+}
+
+task robotControlLoop() {
+	while(true) {
+		if(controlActive) {
+			if(turning) {
+				float curGyro = readGyro();
+				float err = (turnSetpoint - curGyro);
+				
+				if(err < turnErrThreshold) {
+					resetCL();
+					goto controlLoopDone;
+				}	
+				
+				int out = (err * turnP);
+				
+				if(out > maxMotorOut) out = maxMotorOut;
+								
+				motor[LFront] = out;
+				motor[LBack] = out;
+				
+				motor[RFront] = out * -1;
+				motor[RBack] = out * -1;
+			} else {
+				int curEnc = readDriveEncoder();
+				int err = (driveSetpoint - curEnc);
+				
+				if(err < driveErrThreshold) {
+					resetCL();
+					goto controlLoopDone;
+				}
+				
+				int out = (err * driveP);
+				if(out > maxMotorOut) out = maxMotorOut;
+				
+				motor[LFront] = out;
+				motor[RFront] = out;
+				motor[RBack] = out;
+				motor[LBack] = out;
+			}
+		} else if(startDrive) {
+			controlActive = true;
+			
+			if(startTurn) {
+				/* Init turn: */
+				turnStartpoint = readGyro();
+				turning = true;
+			} else {
+				driveStartpoint = readDriveEncoder();			
+			}	/* startTurn */
+			
+			startDrive = false;
+			startTurn = false;		
+		} /* controlActive / startDrive */
+		
+		controlLoopDone:
+		sleep(2);
+	}
+}
+
 task usercontrol()
 {
 	// User control code here, inside the loop
 
 	while (true)
 	{
-	  // This is the main execution loop for the user control program. Each time through the loop
-	  // your program should update motor + servo values based on feedback from the joysticks.
-
-	  // .....................................................................................
-	  // Insert user code here. This is where you use the joystick values to update your motors, etc.
-	  // .....................................................................................
-
-	  UserControlCodePlaceholderForTesting(); // Remove this function call once you have "real" code.
 	}
 }
