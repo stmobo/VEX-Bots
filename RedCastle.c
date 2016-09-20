@@ -25,12 +25,6 @@
 
 void pre_auton()
 {
-  // Set bStopTasksBetweenModes to false if you want to keep user created tasks running between
-  // Autonomous and Tele-Op modes. You will need to manage all user created tasks if set to false.
-  bStopTasksBetweenModes = true;
-
-	// All activities that occur before the competition starts
-	// Example: clearing encoders, setting servo positions, ...
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +92,7 @@ void resetCL() {
 	controlActive = false;
 	turning = false;
 	
-	controlDone = true;
+	//controlDone = true;
 
 	turnSetpoint = 0;
 	driveSetpoint = 0;
@@ -107,61 +101,35 @@ void resetCL() {
 	driveStartpoint = 0;
 }
 
-task robotControlLoop() {
+task LCDUpdate() {
 	while(true) {
-		if(controlActive) {
-			if(turning) {
-				float curGyro = readGyro();
-				float err = (turnSetpoint - curGyro);
-				
-				if(err < turnErrThreshold) {
-					resetCL();
-					goto controlLoopDone;
-				}	
-				
-				int out = (err * turnP);
-				
-				if(out > maxMotorOut) out = maxMotorOut;
-								
-				motor[LFront] = out;
-				motor[LBack] = out;
-				
-				motor[RFront] = out * -1;
-				motor[RBack] = out * -1;
-			} else {
-				int curEnc = readDriveEncoder();
-				int err = (driveSetpoint - curEnc);
-				
-				if(err < driveErrThreshold) {
-					resetCL();
-					goto controlLoopDone;
-				}
-				
-				int out = (err * driveP);
-				if(out > maxMotorOut) out = maxMotorOut;
-				
-				motor[LFront] = out;
-				motor[RFront] = out;
-				motor[RBack] = out;
-				motor[LBack] = out;
-			}
-		} else if(startDrive) {
-			controlActive = true;
-			
-			if(startTurn) {
-				/* Init turn: */
-				turnStartpoint = readGyro();
-				turning = true;
-			} else {
-				driveStartpoint = readDriveEncoder();			
-			}	/* startTurn */
-			
-			startDrive = false;
-			startTurn = false;		
-		} /* controlActive / startDrive */
+		float y = ((float)vexRT[Ch2] / 127.0);
+		float x = ((float)vexRT[Ch1] / 127.0);
 		
-		controlLoopDone:
-		sleep(2);
+		float angle = (atan2(y, x) * (180.0 / PI));
+		
+		if(vexRT[Ch2] < 0) {
+			angle = (angle) + 180;		
+		} if((vexRT[Ch1] < 0) && (vexRT[Ch2] > 0)) {
+			angle = (angle + 90);
+		} else {
+			angle = 90 - angle;
+		}
+		
+		
+		float mag = sqrt(y*y + x*x);
+		
+		float curAngle = readGyro();
+		
+		clearLCDLine(0);
+		clearLCDLine(1);
+		
+		displayLCDString(0, 0, "Y ### X ###");
+		displayLCDString(1, 0, "Ang ");
+		
+		displayLCDNumber(0, 2, (int)(y*100));
+		displayLCDNumber(0, 7, (int)(x*100));
+		displayLCDNumber(1, 5, (int)angle);
 	}
 }
 
@@ -169,7 +137,46 @@ task usercontrol()
 {
 	// User control code here, inside the loop
 
+	startTask(LCDUpdate);
+
 	while (true)
 	{
+		float y = ((float)vexRT[Ch2] / 127.0);
+		float x = ((float)vexRT[Ch1] / 127.0);
+		
+		float angle = (atan2(y, x) * (180 / PI));
+		
+		
+		if(y < 0) {
+			angle = fabs(angle) + 90;		
+		} if(x < 0 && y > 0) {
+			angle = (angle + 90);
+		} else {
+			angle = 90 - angle;
+		}
+
+		
+		float mag = sqrt(y*y + x*x);
+		
+		float curAngle = readGyro();
+		float err = angle - curAngle;
+		
+		if((abs(err) < turnErrThreshold)
+			|| ((vexRT[Ch1] < driveErrThreshold) && (vexRT[Ch2] < driveErrThreshold))) {
+			motor[LFront] = 0;
+			motor[LBack] = 0;
+			motor[RFront] = 0;
+			motor[RBack] = 0;
+		} else {
+			int out = (int)((float)err * (float)turnP);
+			
+			if(abs(out) > maxMotorOut) out = maxMotorOut;
+							
+			motor[LFront] = out;
+			motor[LBack] = out;
+			
+			motor[RFront] = out * -1;
+			motor[RBack] = out * -1;
+		}
 	}
 }
