@@ -76,7 +76,7 @@ float turnStartpoint = 0;
 
 /* Loop parameters */
 float driveP = 1.0;
-float turnP = 1.0;
+float turnP = 0.7;
 int maxMotorOut = 63;
 
 float turnErrThreshold = 1.0;
@@ -124,21 +124,75 @@ void stopMotors() {
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
 }
 
-void turnInterruptable(float setpoint) {
-	while(true) {
-		float curAngle = readGyro();
-		float err = (setpoint - curAngle);
+struct tbhData {
+	float setpoint;
+	float err;
+	int lastSign;
+	
+	float output;
+	float lOutput;
+	float maxOutput;
+	float gain;
+	
+	bool firstCross;
+};
 
-		if(abs(err) < turnErrThreshold) {
+tbhData turnControl;
+
+void resetTBHData(tbhData* st, float setpoint) {
+	st->setpoint = setpoint;
+	st->err = 0;
+	st->output = 0;
+	st->lOutput = 0;
+	st->lastSign = 0;
+	st->firstCross = true;
+}
+
+
+/*
+ * TBH Control Loop: (for S = setpoint)
+ *  o V <- sensor
+ *  o E <- (S - V)
+ *  If V has crossed S: Out <- ((E*gain) + (lastOut)) / 2
+ *  Else: o Out <- E * gain 
+ */
+
+void tbhControlCycle(tbhData *st, float sensorIn) {
+	float err = (st->setpoint - sensorIn);
+	
+	st->err = err;
+	
+	float curOut = (err * st->gain);
+	if(sgn((int)err) != 0 && sgn((int)err) != st->lastSign) {
+		/* Sign change */
+		st->lastSign = sgn((int)err);
+		st->lOutput = st->output = (st->firstCross ? curOut : ((curOut+st->lOutput) / 2) );
+	} else {
+		st->output = curOut;
+	}
+	
+	if(abs(st->output) > st->maxOutput) {
+		st->output = sgn((int)st->output)*st->maxOutput;
+	}
+}
+
+
+void turnInterruptable(float setpoint) {
+	turnControl.gain = turnP;
+	turnControl.maxOutput = maxMotorOut;
+	
+	resetTBHData(&turnControl, setpoint);
+	
+	while(true) {
+		tbhControlCycle(&turnControl, readGyro());
+		
+		if(abs(turnControl.err) < turnErrThreshold) {
 			stopMotors();
 			return;
 		}
 
-		int out = (err * turnP);
-		out = (out>maxMotorOut?maxMotorOut:out);
-
-		motor[LFront] = motor[LBack] = -1*out;
-		motor[RFront] = motor[RBack] = out;
+		motor[LFront] = motor[LBack] = -1*turnControl.output;
+		motor[RFront] = motor[RBack] = turnControl.output;
 
 		sleep(2);
 
