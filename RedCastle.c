@@ -3,6 +3,7 @@
 #pragma config(Motor,  port2,           RFront,        tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port3,           rightLowerIntake, tmotorVex393_MC29, openLoop)
 #pragma config(Motor,  port4,           rightUpperIntake, tmotorVex393_MC29, openLoop)
+#pragma config(Motor,  port5,           hangMotor,     tmotorVex393_MC29, openLoop)
 #pragma config(Motor,  port7,           leftUpperIntake, tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port8,           leftLowerIntake, tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port9,           LFront,        tmotorVex393_MC29, openLoop)
@@ -24,7 +25,7 @@ float turnStartpoint = 0;
 
 /* Loop parameters */
 float driveP = 3.0;
-float turnP = 3;
+float turnP = 2;
 int maxMotorOut = 63;
 
 float turnErrThreshold = 1.0;
@@ -38,14 +39,14 @@ struct tbhData {
 	int lastSign;		/* Sign of err on last cycle. */
 	float lOutput;		/* Output value from last setpoint crossing. */
 	bool firstCross;	/* Will be set to FALSE after the first setpoint crossing. */
-	
+
 	/* Input parameters: */
 	float setpoint;
 	float gain;
 	float maxOutput;	/* this->output will be capped to +/-(this->maxOutput). */
-	
+
 	float output;		/* Control output. (e.g. motor power) */
-	
+
 	/* Output event flags. Clear these after handling their event. */
 	bool crossed;		/* Will be set to TRUE on a setpoint crossing. */
 	bool active;		/* Will be set to TRUE on every tbhControlCycle(). */
@@ -77,29 +78,29 @@ task LCDUpdate() {
 
 		clearLCDLine(0);
 		clearLCDLine(1);
-		
+
 		if(turnControl.active) {
 			displayLCDString(0, 0, "Turn Active: ");
 			displayLCDNumber(0, 13, (int)turnControl.setpoint);
-			
-			
+
+
 			displayLCDString(1, 0, "Err: ");
 			displayLCDNumber(1, 5, (int)turnControl.err);
-			
-			
+
+
 			displayLCDString(1, 10, "Out: ");
-			displayLCDNumber(1, 15, (int)turnControl.out);
+			displayLCDNumber(1, 15, (int)turnControl.output);
 		} else if(driveControl.active) {
 			displayLCDString(0, 0, "Drive Active: ");
 			displayLCDNumber(0, 14, (int)driveControl.setpoint);
-			
-			
+
+
 			displayLCDString(1, 0, "Err: ");
 			displayLCDNumber(1, 5, (int)driveControl.err);
-			
-			
+
+
 			displayLCDString(1, 10, "Out: ");
-			displayLCDNumber(1, 15, (int)driveControl.out);
+			displayLCDNumber(1, 15, (int)driveControl.output);
 		} else if(autoMode) {
 			displayLCDString(0, 0, "Autonomous Active");
 		} else {
@@ -131,15 +132,15 @@ void resetTBHData(tbhData* st, float setpoint) {
  *  o V <- sensor
  *  o E <- (S - V)
  *  If V has crossed S: Out <- ((E*gain) + (lastOut)) / 2
- *  Else: o Out <- E * gain 
+ *  Else: o Out <- E * gain
  */
- 
+
 void tbhControlCycle(tbhData *st, float sensorIn) {
 	float err = (st->setpoint - sensorIn);
-	
+
 	st->err = err;
 	st->active = true;
-	
+
 	float curOut = (err * st->gain);
 	if(sgn((int)err) != 0 && sgn((int)err) != st->lastSign) {
 		/* Sign change */
@@ -150,7 +151,7 @@ void tbhControlCycle(tbhData *st, float sensorIn) {
 	} else {
 		st->output = curOut;
 	}
-	
+
 	if(abs(st->output) > st->maxOutput) {
 		st->output = sgn((int)st->output)*st->maxOutput;
 	}
@@ -174,21 +175,21 @@ void tbhControlCycle(tbhData *st, float sensorIn) {
 void turnInterruptable(float setpoint) {
 	turnControl.gain = turnP;
 	turnControl.maxOutput = maxMotorOut;
-	
+
 	resetTBHData(&turnControl, setpoint);
-	
+
 	clearTimer(T2);
-	
+
 	while(true) {
 		bool lastCross = turnControl.firstCross;
 		tbhControlCycle(&turnControl, readGyro());
-		
+
 		if(!lastCross && turnControl.crossed && abs((int)turnControl.output) < 10) {
 			stopMotors();
 			turnControl.active = false;
 			return;
 		}
-		
+
 		if(turnControl.crossed)
 			turnControl.crossed = false;
 
@@ -196,7 +197,7 @@ void turnInterruptable(float setpoint) {
 		motor[RFront] = motor[RBack] = turnControl.output;
 
 		sleep(2);
-		
+
 		if(time1[T2] > autoTurnTimeout) {
 			stopMotors();
 			turnControl.active = false;
@@ -241,6 +242,14 @@ void holdShot() {
 	motor[leftUpperIntake] = 0;
 }
 
+void doHang() {
+	motor[hangMotor] = 127;
+	sleep(500);
+	motor[hangMotor] = -127;
+	sleep(1000);
+	motor[hangMotor] = 0;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 //                          Pre-Autonomous Functions
@@ -272,32 +281,44 @@ void autoShoot() {
 	fireShot();
 }
 
-bool onRightSide = false;
+bool onRightSide = true;
 
 task autonomous()
 {
 	autoMode = true;
-	
+
 	/* Move to high hang position from start: */
 	
+	fireShot();
+	sleep(250);
+	primeShot();
+	sleep(750);
+	holdShot();
+	sleep(100);
+
 	turnInterruptable(-90);
 	motor[RBack] = motor[RFront] = motor[LBack] = motor[LFront] = 127;
-	
+
 	if(!onRightSide) {
 		sleep(1500);
 	} else {
 		sleep(250);
 	}
-	
+
 	stopMotors();
 	turnInterruptable(0);
 	
-	motor[RBack] = motor[RFront] = motor[LBack] = motor[LFront] = 32;
+	fireShot();
+	sleep(250);
+
+	motor[RBack] = motor[RFront] = motor[LBack] = motor[LFront] = -32;
 	sleep(100);
-	
+
 	stopMotors();
-	
+
 	/* Do the rest of the high hang stuff. */
+	
+	doHang();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -331,6 +352,15 @@ task usercontrol()
 			holdShot();
 		}
 		
+		/* Hang control */
+		if( vexRT[Btn8U] && !vexRT[Btn8D] ) {
+			motor[hangMotor] = 127;
+		} else if( vexRT[Btn8D] && !vexRT[Btn8U] ) {
+			motor[hangMotor] = -127;
+		} else if( !vexRT[Btn8D] && !vexRT[Btn8U] ) {
+			motor[hangMotor] = 0;
+		}
+
 		/* Movement control: */
 		if( vexRT[Btn5D] || vexRT[Btn5U] ) {
 			/* Rotation inputs: */
@@ -358,8 +388,8 @@ task usercontrol()
 				motor[LBack] = motor[LFront] = vexRT[Ch3];
 				motor[RBack] = motor[RFront] = vexRT[Ch2];
 			} else {
-				yAxis = (abs(vexRT[Ch2]) < deadband) ? 0 : -vexRT[Ch2];
-				zAxis = (abs(vexRT[Ch1]) < deadband) ? 0 : vexRT[Ch1];
+				short yAxis = (abs(vexRT[Ch2]) < deadband) ? 0 : vexRT[Ch2];
+				short zAxis = (abs(vexRT[Ch1]) < deadband) ? 0 : vexRT[Ch1];
 
 				motor[RFront] = motor[RBack] = yAxis - zAxis;
 				motor[LFront] = motor[LBack] =  yAxis + zAxis;
