@@ -1,4 +1,5 @@
 #pragma config(Sensor, in1,    gyro,           sensorGyro)
+#pragma config(Sensor, dgtl1,  catapultLim,    sensorTouch)
 #pragma config(Motor,  port1,           RBack,         tmotorVex393_HBridge, openLoop, reversed)
 #pragma config(Motor,  port2,           RFront,        tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port3,           rightLowerIntake, tmotorVex393_MC29, openLoop)
@@ -275,7 +276,8 @@ void pre_auton()
 
 void autoShoot() {
 	primeShot();
-	sleep(500);
+	clearTimer(T2);
+	while(time1[T2] < 750 && sensorValue[catapultLim] == 0) { sleep(2); }
 	holdShot();
 	sleep(50);
 	fireShot();
@@ -286,9 +288,14 @@ bool onRightSide = true;
 task autonomous()
 {
 	autoMode = true;
+	
+	/* Raise the hang mechanism slightly. */
+	motor[hangMotor] = 16;
+	sleep(100);
+	motor[hangMotor] = 0;
 
 	/* Move to high hang position from start: */
-	
+
 	fireShot();
 	sleep(250);
 	primeShot();
@@ -307,7 +314,7 @@ task autonomous()
 
 	stopMotors();
 	turnInterruptable(0);
-	
+
 	fireShot();
 	sleep(250);
 
@@ -317,7 +324,7 @@ task autonomous()
 	stopMotors();
 
 	/* Do the rest of the high hang stuff. */
-	
+
 	doHang();
 }
 
@@ -344,14 +351,14 @@ task usercontrol()
 	while (true)
 	{
 		/* Fire control: */
-		if(vexRT[Btn6U] && !vexRT[Btn6D]) {
+		if(vexRT[Btn6U] && !vexRT[Btn6D] && sensorValue[catapultLim] == 0) {
 			primeShot();
 		} else if(!vexRT[Btn6U] && vexRT[Btn6D]) {
 			fireShot();
-		} else if(!vexRT[Btn6U] && !vexRT[Btn6D]) {
+		} else if((!vexRT[Btn6U] && !vexRT[Btn6D]) || (sensorValue[catapultLim] == 1)) {
 			holdShot();
 		}
-		
+
 		/* Hang control */
 		if( vexRT[Btn8U] && !vexRT[Btn8D] ) {
 			motor[hangMotor] = 127;
@@ -388,7 +395,7 @@ task usercontrol()
 				motor[LBack] = motor[LFront] = vexRT[Ch3];
 				motor[RBack] = motor[RFront] = vexRT[Ch2];
 			} else {
-				short yAxis = (abs(vexRT[Ch2]) < deadband) ? 0 : vexRT[Ch2];
+				short yAxis = (abs(vexRT[Ch2]) < deadband) ? 0 : -vexRT[Ch2];
 				short zAxis = (abs(vexRT[Ch1]) < deadband) ? 0 : vexRT[Ch1];
 
 				motor[RFront] = motor[RBack] = yAxis - zAxis;
