@@ -1,5 +1,12 @@
+#pragma config(I2C_Usage, I2C1, i2cSensors)
 #pragma config(Sensor, in1,    gyro,           sensorGyro)
+#pragma config(Sensor, in2,    autoSelector,   sensorPotentiometer)
+#pragma config(Sensor, in3,    posSelector,    sensorPotentiometer)
 #pragma config(Sensor, dgtl1,  catapultLim,    sensorTouch)
+#pragma config(Sensor, I2C_1,  catapultEnc,    sensorQuadEncoderOnI2CPort,    , AutoAssign )
+#pragma config(Sensor, I2C_2,  hangEnc,        sensorQuadEncoderOnI2CPort,    , AutoAssign )
+#pragma config(Sensor, I2C_3,  rightEnc,       sensorQuadEncoderOnI2CPort,    , AutoAssign )
+#pragma config(Sensor, I2C_4,  leftEnc,        sensorQuadEncoderOnI2CPort,    , AutoAssign )
 #pragma config(Motor,  port1,           RBack,         tmotorVex393_HBridge, openLoop)
 #pragma config(Motor,  port2,           RFront,        tmotorVex393_MC29, openLoop)
 #pragma config(Motor,  port3,           rightLowerIntake, tmotorVex393_MC29, openLoop)
@@ -19,6 +26,7 @@
 #pragma userControlDuration(120)
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
+#include "./Sternenlicht.c"
 
 /* Internal variables! */
 int driveStartpoint = 0;
@@ -54,6 +62,12 @@ struct tbhData {
 	bool crossed;		/* Will be set to TRUE on a setpoint crossing. */
 	bool active;		/* Will be set to TRUE on every tbhControlCycle(). */
 };
+
+int dividePotentiometer(int sensorIn, int nSelects) {
+	int thresholds = 1024 / nSelects;
+	int n = sensorIn / thresholds;
+	return n;
+}
 
 tbhData turnControl;
 tbhData driveControl;
@@ -446,10 +460,10 @@ task usercontrol()
 
 				short right = yAxis - zAxis;
 				short left = yAxis + zAxis;
-				
+
 				right = (abs(right) > absoluteMaxDrive) ? (sgn(right)*absoluteMaxDrive) : right;
 				left = (abs(left) > absoluteMaxDrive) ? (sgn(left)*absoluteMaxDrive) : left;
-				
+
 				motor[RFront] = motor[RBack] = right;
 				motor[LFront] = motor[LBack] = left;
 			}
