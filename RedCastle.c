@@ -28,10 +28,6 @@
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 #include "./CrossingWaves.c"
 
-/* Internal variables! */
-int driveStartpoint = 0;
-float turnStartpoint = 0;
-
 /* Loop parameters */
 float leftP = 3.0;
 float rightP = 3.0;
@@ -41,7 +37,7 @@ int maxMotorOut = 63;
 float turnErrThreshold = 1.0;
 int driveErrThreshold = 5;
 
-int autoTurnTimeout = 2000;
+int interruptableTurnTimeout = 2000;
 
 bool limSwitchEnabled = false;
 
@@ -184,10 +180,10 @@ task autoDriveDebug() {
  *  autoDrive(2.0) -> drive 2.0 feet forward
  *  autoDrive(-2.0) -> drive 2.0 feet backward
  *
- * This function is NOT interruptable!
+ * This function is not user-interruptable, but will timeout (if timeout > 0).
  */
 
-void autoDrive(float distance) {
+void autoDrive(float distance, int timeout) {
 	leftControl.gain = leftP;
 	rightControl.gain = rightP;
 	
@@ -200,17 +196,25 @@ void autoDrive(float distance) {
 	resetTBHData(&leftControl, encoderDelta);
 	resetTBHData(&rightControl, encoderDelta);
 
+	if(timeout > 0)
+		clearTimer(T2);
+	
 	while(true) {
 		bool lCross = leftControl.firstCross;
 		bool rCross = rightControl.firstCross;
 		tbhControlCycle(&leftControl, getMotorEncoder(LFront));
 		tbhControlCycle(&rightControl, getMotorEncoder(RFront));
 
+		/* Test for:
+		* More than 1 setpoint crossing.
+		* Low output / oscilliation.
+		* Close to setpoint.
+		*/
 		if(!lCross && !rCross &&
-			leftControl.crossed &&
-			rightControl.crossed &&
-			abs((int)leftControl.output) < 10 &&
-			abs((int)rightControl.output) < 10) {
+			leftControl.crossed && rightControl.crossed &&
+			(abs((int)leftControl.output) < 10) && (abs((int)rightControl.output) < 10) &&
+			(abs(leftControl.err) < driveErrThreshold) && (abs(rightControl.err) < driveErrThreshold))
+		{
 			stopMotors();
 			leftControl.active = false;
 			rightControl.active = false;
@@ -219,6 +223,13 @@ void autoDrive(float distance) {
 
 		leftControl.crossed = false;
 		rightControl.crossed = false;
+		
+		if((timeout > 0) && (time1[T2] > timeout)) {
+			stopMotors();
+			leftControl.active = false;
+			rightControl.active = false;
+			return;
+		}
 
 		motor[LFront] = motor[LBack] = leftControl.output;
 		motor[RFront] = motor[RBack] = rightControl.output;
@@ -231,6 +242,48 @@ void autoDrive(float distance) {
  * A turn to (angle-360) is better, since it turns a shorter distance (clockwise instead of ccw)
  * Maybe use this library to fix that?: https://github.com/jpearman/RobotCLibs/blob/master/gyroLib/gyroLib2.c
  */
+
+ /* Turn to a given heading as indicated by the gyro.
+  * Not user-interruptable, but will timeout if timeout > 0.
+  */
+void autoTurn(float setpoint, int timeout) {
+	turnControl.gain = turnP;
+	turnControl.maxOutput = maxMotorOut;
+
+	resetTBHData(&turnControl, setpoint);
+
+	if(timeout > 0)
+		clearTimer(T2);
+
+	while(true) {
+		bool lastCross = turnControl.firstCross;
+		tbhControlCycle(&turnControl, readGyro());
+
+		if(!lastCross && turnControl.crossed && abs((int)turnControl.output) < 10) {
+			stopMotors();
+			turnControl.active = false;
+			return;
+		}
+
+		turnControl.crossed = false;
+			
+		if((timeout > 0) && (time1[T2] > timeout)) {
+			stopMotors();
+			turnControl.active = false;
+			return;
+		}
+
+		motor[LFront] = motor[LBack] = -1*turnControl.output;
+		motor[RFront] = motor[RBack] = turnControl.output;
+
+		sleep(2);
+	}
+}
+ 
+ /* Turn to a given heading as indicated by the gyro.
+  * This will automatically timeout, and can also be interrupted by any input on the controller.
+  */
+
 void turnInterruptable(float setpoint) {
 	turnControl.gain = turnP;
 	turnControl.maxOutput = maxMotorOut;
@@ -257,12 +310,13 @@ void turnInterruptable(float setpoint) {
 
 		sleep(2);
 
-		if(time1[T2] > autoTurnTimeout) {
+		if(time1[T2] > interruptableTurnTimeout) {
 			stopMotors();
 			turnControl.active = false;
 			return;
 		}
 
+		/* Test for user interrupt: */
 		if(
 			abs(vexRT[Ch2]) > 5 ||
 			abs(vexRT[Ch3]) > 5 ||
@@ -368,7 +422,7 @@ task autonomous()
 	 Auto test routine:
 	 */
 	startTask(autoDriveDebug);
-	autoDrive(2.0);
+	autoDrive(2.0, -1);
 
 	/* Raise the hang mechanism slightly. */
 	/*
