@@ -188,7 +188,9 @@ void tbhControlCycle(tbhData *st, float sensorIn) {
  */
 
 /* Note: for a turn to 270 degrees (or any angle above 180)
- * A turn to (angle-360) is better, since it turns a shorter distance (clockwise instead of ccw)*/
+ * A turn to (angle-360) is better, since it turns a shorter distance (clockwise instead of ccw)
+ * Maybe use this library to fix that?: https://raw.githubusercontent.com/jpearman/RobotCLibs/master/gyroLib/gyroLib2.c
+ */
 void turnInterruptable(float setpoint) {
 	turnControl.gain = turnP;
 	turnControl.maxOutput = maxMotorOut;
