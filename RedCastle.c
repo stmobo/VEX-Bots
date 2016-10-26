@@ -26,14 +26,15 @@
 #pragma userControlDuration(120)
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
-#include "./Sternenlicht.c"
+#include "./CrossingWaves.c"
 
 /* Internal variables! */
 int driveStartpoint = 0;
 float turnStartpoint = 0;
 
 /* Loop parameters */
-float driveP = 3.0;
+float leftP = 3.0;
+float rightP = 3.0;
 float turnP = 2;
 int maxMotorOut = 63;
 
@@ -44,25 +45,6 @@ int autoTurnTimeout = 2000;
 
 bool limSwitchEnabled = false;
 
-struct tbhData {
-	/* Internal variables: */
-	float err;		/* Control loop error. */
-	int lastSign;		/* Sign of err on last cycle. */
-	float lOutput;		/* Output value from last setpoint crossing. */
-	bool firstCross;	/* Will be set to FALSE after the first setpoint crossing. */
-
-	/* Input parameters: */
-	float setpoint;
-	float gain;
-	float maxOutput;	/* this->output will be capped to +/-(this->maxOutput). */
-
-	float output;		/* Control output. (e.g. motor power) */
-
-	/* Output event flags. Clear these after handling their event. */
-	bool crossed;		/* Will be set to TRUE on a setpoint crossing. */
-	bool active;		/* Will be set to TRUE on every tbhControlCycle(). */
-};
-
 int dividePotentiometer(int sensorIn, int nSelects) {
 	int thresholds = 1024 / nSelects;
 	int n = sensorIn / thresholds;
@@ -70,16 +52,18 @@ int dividePotentiometer(int sensorIn, int nSelects) {
 }
 
 tbhData turnControl;
-tbhData driveControl;
+tbhData leftControl;
+tbhData rightControl;
 
 bool autoMode = false;
 
-int readDriveEncoder() {
-	return -1; // TODO: Replace with actual encoder reading code
-}
-
 void resetGyro() {
 	sensorValue[gyro] = 0;
+}
+
+void resetEncoders() {
+	resetMotorEncoder(LFront);
+	resetMotorEncoder(RFront);
 }
 
 /* Gyro positive = ccw, gyro negative = cw */
@@ -132,64 +116,120 @@ void stopMotors() {
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
 }
 
+float wheelCircumference = 2 * PI * 2; // 4in wheel diameter = 2in radius.
+float ticksPerRevolution = 392;
 
-void resetTBHData(tbhData* st, float setpoint) {
-	st->setpoint = setpoint;
-	st->err = 0;
-	st->output = 0;
-	st->lOutput = 0;
-	st->lastSign = 0;
-	st->firstCross = true;
-	st->crossed = false;
-	st->active = false;
+int ftToEncoderTicks(float feet) {
+	float revs = feet / wheelCircumference;
+	float ticks = revs * ticksPerRevolution;
+	return ticks;
+};
+
+// debugger state:
+int lastEncoderDelta = 0;
+task autoDriveDebug() {
+	int state = 0;
+	while(true) {
+		clearLCDLine(0);
+		clearLCDLine(1);
+		if(state == 0) {
+			// Display Left-Side data:
+			displayLCDString(0, 0, "Val:");
+			displayLCDString(1, 0, "Err:");
+			
+			displayLCDNumber(0, 4, getMotorEncoder(LFront));
+			displayLCDNumber(1, 4, leftControl.err);
+		} else if(state == 1) {
+			// Display other data:
+			displayLCDString(0, 0, "Del:"); // delta
+			displayLCDString(1, 0, "Sta:"); // state
+			
+			displayLCDNumber(0, 4, lastEncoderDelta);
+			
+			if(leftControl.active) {
+				displayLCDChar(1, 4, 'L');
+			}
+			
+			if(rightControl.active) {
+				displayLCDChar(1, 5, 'R');
+			}
+			
+			displayLCDNumber(1, 6, (int)leftControl.out);
+			displayLCDChar(1, 9, '/');
+			displayLCDNumber(1, 10, (int)rightControl.out);
+		} else /* state == 2 */ {
+			// Display Right-Side Data:
+			displayLCDString(0, 0, "Val:");
+			displayLCDString(1, 0, "Err:");
+			
+			displayLCDNumber(0, 4, getMotorEncoder(RFront));
+			displayLCDNumber(1, 4, rightControl.err);
+		}
+		
+		if(nLCDButtons == 1) {
+			state = 0;
+		} else if(nLCDButtons == 2) {
+			state = 1;
+		} else if(nLCDButtons == 4) {
+			state = 2;
+		}
+		sleep(5);
+	}
 }
 
-/*
- * TBH Control Loop: (for S = setpoint)
- *  o V <- sensor
- *  o E <- (S - V)
- *  If V has crossed S: Out <- ((E*gain) + (lastOut)) / 2
- *  Else: o Out <- E * gain
- */
-
-void tbhControlCycle(tbhData *st, float sensorIn) {
-	float err = (st->setpoint - sensorIn);
-
-	st->err = err;
-	st->active = true;
-
-	float curOut = (err * st->gain);
-	if(sgn((int)err) != 0 && sgn((int)err) != st->lastSign) {
-		/* Sign change */
-		st->lastSign = sgn((int)err);
-		st->lOutput = st->output = (st->firstCross ? curOut : ((curOut+st->lOutput) / 2) );
-		st->firstCross = false;
-		st->crossed = true;
-	} else {
-		st->output = curOut;
-	}
-
-	if(abs(st->output) > st->maxOutput) {
-		st->output = sgn((int)st->output)*st->maxOutput;
-	}
-}
-
-/*
- * How to use TBHData:
- *  - Call resetTBHData(&your_tbh_struct, setpoint);
- *  - Ensure your gain and maxOutput variables are set (set all input parameters)
- *  - In a loop:
- *   o Call tbhControlCycle(&your_tbh_struct, sensor_input). This does the important control loop calculations, etc.
- *   o Handle raised events as necessary.
- *   o Do everything else. For example, actually using the output value(!) or checking exit conditions(!).
- *  - When done, make sure to set your_tbh_struct.active to FALSE for the benefit of any listeners.
+/* Drives a given distance forward or backwards.
+ * (Negative values drive the robot backwards.)
  *
- * For a good example, see turnInterruptable() below.
+ * i.e:
+ *  autoDrive(2.0) -> drive 2.0 feet forward
+ *  autoDrive(-2.0) -> drive 2.0 feet backward
+ *
+ * This function is NOT interruptable!
  */
+
+void autoDrive(float distance) {
+	leftControl.gain = leftP;
+	rightControl.gain = rightP;
+	
+	leftControl.maxOutput = rightControl.maxOutput = maxMotorOut;
+	
+	int encoderDelta = lastEncoderDelta = ftToEncoderTicks(distance);
+
+	resetMotorEncoder(LFront);
+	resetMotorEncoder(RFront);
+	resetTBHData(&leftControl, encoderDelta);
+	resetTBHData(&rightControl, encoderDelta);
+
+	while(true) {
+		bool lCross = leftControl.firstCross;
+		bool rCross = rightControl.firstCross;
+		tbhControlCycle(&leftControl, getMotorEncoder(LFront));
+		tbhControlCycle(&rightControl, getMotorEncoder(RFront));
+
+		if(!lCross && !rCross &&
+			leftControl.crossed &&
+			rightControl.crossed &&
+			abs((int)leftControl.output) < 10 &&
+			abs((int)rightControl.output) < 10) {
+			stopMotors();
+			leftControl.active = false;
+			rightControl.active = false;
+			return;
+		}
+
+		leftControl.crossed = false;
+		rightControl.crossed = false;
+
+		motor[LFront] = motor[LBack] = leftControl.output;
+		motor[RFront] = motor[RBack] = rightControl.output;
+
+		sleep(2);
+	}
+}
 
 /* Note: for a turn to 270 degrees (or any angle above 180)
  * A turn to (angle-360) is better, since it turns a shorter distance (clockwise instead of ccw)
- * Maybe use this library to fix that?: https://raw.githubusercontent.com/jpearman/RobotCLibs/master/gyroLib/gyroLib2.c
+ * Maybe use this library to fix that?: https://github.com/jpearman/RobotCLibs/blob/master/gyroLib/gyroLib2.c
  */
 void turnInterruptable(float setpoint) {
 	turnControl.gain = turnP;
@@ -281,6 +321,7 @@ void doHang() {
 void pre_auton()
 {
 	resetGyro();
+	resetEncoders();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -319,6 +360,15 @@ void doShakeRoutine() {
 task autonomous()
 {
 	autoMode = true;
+	
+	resetGyro();
+	resetEncoders();
+	
+	/*
+	 Auto test routine:
+	 */
+	startTask(autoDriveDebug);
+	autoDrive(2.0);
 
 	/* Raise the hang mechanism slightly. */
 	/*
