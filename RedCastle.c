@@ -305,6 +305,15 @@ void autoShoot() {
 
 bool onRightSide = true;
 
+/* Drive forward and back to unlock the mechanism. */
+void doShakeRoutine() {
+	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 127;
+	sleep(250);
+	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = -127;
+	sleep(250);
+	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
+}
+
 task autonomous()
 {
 	autoMode = true;
