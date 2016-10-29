@@ -456,22 +456,23 @@ void setRightMotors(short val) {
 
 void deployRoutine() {
 	setAllMotors(-127);
-	sleep(1500);
-	//setAllMotors(127);
-	//sleep(500);
+	sleep(1000);
+	setAllMotors(127);
+	sleep(100);
 	stopMotors();
 }
 
 void lowerCatapult() {
 	catapultDown();
 	clearTimer(T2);
-	while(time1[T2] < 2000 && sensorValue[catapultLim] == 0) { sleep(2); }
+	while(time1[T2] < 1250 && sensorValue[catapultLim] == 0) { sleep(2); }
 	catapultStop();
 }
 
 void fireCatapult() {
-	catapultUp();
-	sleep(500);
+	clearTimer(T2);
+	catapultDown();
+	while(time1[T2] < 50 && sensorValue[catapultLim] > 0) { sleep(2); };
 	catapultStop();
 }
 
@@ -491,12 +492,13 @@ task autonomous()
 	/* Unlock routine. */
 	deployRoutine();
 
-	/*
-	autoTurn(180, 750);
+	
+	//autoTurn(180, 750);
 
-	fireCatapult();
-	lowerCatapult();
-
+	//fireCatapult();
+	
+	
+  /*
 	autoTurn(0, 750);
 
 	autoDrive(3 * 12.0, 1500);
@@ -666,22 +668,6 @@ task usercontrol()
 			/* Rotation inputs: */
 			motor[LBack] = motor[LFront] = (vexRT[Btn8D] ? -1*manualTurnOut : manualTurnOut);
 			motor[RBack] = motor[RFront] = (vexRT[Btn8D] ? manualTurnOut : -1*manualTurnOut);
-		} else if(
-			vexRT[Btn7U] ||
-			vexRT[Btn7D] ||
-			vexRT[Btn7R] ||
-			vexRT[Btn7L]
-		) /* If any button in group 7 is pressed... */ {
-			/* Absolute rotation buttons: */
-			if(vexRT[Btn7U]) {
-				turnInterruptable(0);
-			} else if(vexRT[Btn7R]) {
-				turnInterruptable(-90);
-			} else if(vexRT[Btn7D]) {
-				turnInterruptable(180);
-			} else if(vexRT[Btn7L]) {
-				turnInterruptable(90);
-			}
 		} else {
 			if(tankDriveActive) {
 				/* Tank Drive inputs: */
