@@ -37,7 +37,7 @@ int driveErrThreshold = 5;
 
 int interruptableTurnTimeout = 2000;
 
-bool limSwitchEnabled = true;
+bool limSwitchEnabled = false;
 
 int dividePotentiometer(int sensorIn, int nSelects) {
 	int thresholds = 1024 / nSelects;
@@ -349,21 +349,21 @@ void turnInterruptable(float setpoint) {
 	}
 }
 
-void primeShot() {
+void catapultDown() {
 	motor[rightLowerIntake] = 127;
 	motor[rightUpperIntake] = 127;
 	motor[leftLowerIntake] = 127;
 	motor[leftUpperIntake] = 127;
 }
 
-void fireShot() {
+void catapultUp() {
 	motor[rightLowerIntake] = -127;
 	motor[rightUpperIntake] = -127;
 	motor[leftLowerIntake] = -127;
 	motor[leftUpperIntake] = -127;
 }
 
-void holdShot() {
+void catapultStop() {
 	motor[rightLowerIntake] = 0;
 	motor[rightUpperIntake] = 0;
 	motor[leftLowerIntake] = 0;
@@ -403,16 +403,16 @@ void pre_auton()
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void autoShoot() {
-	primeShot();
+	catapultDown();
 	if(limSwitchEnabled) {
 		clearTimer(T2);
 		while(time1[T2] < 750 && sensorValue[catapultLim] == 0) { sleep(2);}
 	} else {
 		sleep(750);
 	}
-	holdShot();
+	catapultStop();
 	sleep(50);
-	fireShot();
+	catapultUp();
 }
 
 bool onRightSide = true;
@@ -430,7 +430,7 @@ void autoTestRoutine() {
 	writeDebugStreamLine("Beginning auto code.");
 
 	datalogClear();
-	
+
 	/*
 	Auto test routine:
 	*/
@@ -456,25 +456,23 @@ void setRightMotors(short val) {
 
 void deployRoutine() {
 	setAllMotors(-127);
-	sleep(2000);
-	setAllMotors(127);
-	sleep(500);
+	sleep(1500);
+	//setAllMotors(127);
+	//sleep(500);
 	stopMotors();
 }
 
 void lowerCatapult() {
-	primeShot
-	
-	();
+	catapultDown();
 	clearTimer(T2);
 	while(time1[T2] < 2000 && sensorValue[catapultLim] == 0) { sleep(2); }
-	holdShot();
+	catapultStop();
 }
 
 void fireCatapult() {
-	fireShot();
+	catapultUp();
 	sleep(500);
-	holdShot();
+	catapultStop();
 }
 
 task autonomous()
@@ -489,30 +487,30 @@ task autonomous()
 	sleep(250);
 	motor[hangMotor] = 0;
 
-	
+
 	/* Unlock routine. */
 	deployRoutine();
-	
+
 	/*
 	autoTurn(180, 750);
-	
+
 	fireCatapult();
 	lowerCatapult();
-	
+
 	autoTurn(0, 750);
-	
+
 	autoDrive(3 * 12.0, 1500);
-	
+
 	autoTurn(-90, 750);
-	
+
 	autoDrive(3 * 12.0, 1500);
-	
+
 	autoTurn(-135, 750);
- 
+
 	autoDrive(2 * 12.0, 1500);
-	
+
 	fireCatapult();
-	
+
 	// and end.
 	*/
 }
@@ -534,10 +532,54 @@ int manualTurnOut = 32;
 int absoluteMaxDrive = 96;
 
 task lowerCatapultAsync() {
-	primeShot();
+	catapultDown();
 	clearTimer(T2);
 	while(time1[T2] < 2000 && sensorValue[catapultLim] == 0) { sleep(2); }
-	holdShot();
+	catapultStop();
+}
+
+void intakeReset()
+{
+	if (vexRT[Btn7U] && !SensorValue[catapultLim])
+	{
+		motor[rightLowerIntake] = 127;
+		motor[leftLowerIntake] = 127;
+		motor[rightUpperIntake] = 127;
+		motor[leftUpperIntake] = 127;
+	}
+}
+
+void fireRoutine() {
+	clearTimer(T4);
+	catapultDown();
+	while(true) {
+		if((sensorValue[catapultLim] == 0) || (time1[T4] > 50)) {
+			catapultStop();
+			return;
+		}
+		sleep(2);
+	}
+}
+
+/*
+ * Background safety checks.
+ *  If the catapult limit switch has been hit and then released, the catapult motors should be off.
+ */
+task catSafety() {
+	bool cocked = false;
+	while(true) {
+		if(cocked) {
+			if(sensorValue[catapultLim] == 0) {
+				catapultStop();
+				cocked = false;
+			}
+		} else {
+			if(sensorValue[catapultLim] == 1) {
+				cocked = true;
+			}
+		}
+		sleep(2);
+	}
 }
 
 task usercontrol()
@@ -546,24 +588,67 @@ task usercontrol()
 
 	//startTask(LCDUpdate);
 
+	/*
+	 * state 0 -> catapult moving to switch
+	 * state 1 -> catapult halted at switch
+	 * state 2 -> catapult ready to fire
+	 */
+	short catState = 0;
+
 	while (true)
 	{
+		intakeReset();
+
 		/* Fire control: */
 		if(!limSwitchEnabled) {
 			if(vexRT[Btn6U] && !vexRT[Btn6D]) {
-				primeShot();
+				catapultDown();
 			} else if(!vexRT[Btn6U] && vexRT[Btn6D]) {
-				fireShot();
+				catapultUp();
 			} else if(!vexRT[Btn6U] && !vexRT[Btn6D]) {
-				holdShot();
+				catapultStop();
 			}
 		} else {
-			if(vexRT[Btn6U] && !vexRT[Btn6D] && sensorValue[catapultLim] == 0) {
-				primeShot();
-			} else if(!vexRT[Btn6U] && vexRT[Btn6D]) {
-				fireCatapult();
-			} else if(!vexRT[Btn6U] && !vexRT[Btn6D]) {
-				holdShot();
+			if(catState == 0) {
+				if(vexRT[Btn6U]) {
+					catapultDown();
+				} else if(vexRT[Btn6D]) {
+					catapultUp();
+				} else {
+					catapultStop();
+				}
+
+				if(sensorValue[catapultLim] == 1) {
+					catapultStop();
+					catState = 1;
+					clearTimer(T3);
+				}
+			} else if(catState == 1) {
+				if(!vexRT[Btn6U]) {
+					if(time1[T3] > 150) {
+						catState = 2;
+					}
+				} else if(vexRT[Btn6D]) {
+					catapultUp();
+				} else {
+					catapultStop();
+				}
+
+				if(sensorValue[catapultLim] == 0) {
+					catState = 0;
+				}
+			} else if(catState == 2) {
+				if(vexRT[Btn6U]) {
+					fireRoutine();
+				} else if(vexRT[Btn6D]) {
+					catapultUp();
+				} else {
+					catapultStop();
+				}
+
+				if(sensorValue[catapultLim] == 0) {
+					catState = 0;
+				}
 			}
 		}
 
