@@ -9,7 +9,7 @@
 #pragma config(Motor,  port2,           RFront,        tmotorVex393HighSpeed_MC29, openLoop, encoderPort, I2C_2)
 #pragma config(Motor,  port3,           rightLowerIntake, tmotorVex393_MC29, openLoop)
 #pragma config(Motor,  port4,           rightUpperIntake, tmotorVex393_MC29, openLoop)
-#pragma config(Motor,  port5,           hangMotor,     tmotorVex393_MC29, openLoop)
+#pragma config(Motor,  port6,           hangMotor,     tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port7,           leftUpperIntake, tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port8,           leftLowerIntake, tmotorVex393_MC29, openLoop, reversed)
 #pragma config(Motor,  port9,           LFront,        tmotorVex393HighSpeed_MC29, openLoop, reversed, encoderPort, I2C_1)
@@ -37,7 +37,7 @@ int driveErrThreshold = 5;
 
 int interruptableTurnTimeout = 2000;
 
-bool limSwitchEnabled = false;
+bool limSwitchEnabled = true;
 
 int dividePotentiometer(int sensorIn, int nSelects) {
 	int thresholds = 1024 / nSelects;
@@ -419,9 +419,9 @@ bool onRightSide = true;
 
 /* Drive forward and back to unlock the mechanism. */
 void doShakeRoutine() {
-	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 127;
-	sleep(250);
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = -127;
+	sleep(250);
+	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 127;
 	sleep(250);
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
 }
@@ -454,16 +454,18 @@ void setRightMotors(short val) {
 	motor[RFront] = motor[RBack] = val;
 }
 
-void unlockRoutine() {
+void deployRoutine() {
+	setAllMotors(-127);
+	sleep(2000);
 	setAllMotors(127);
-	sleep(400);
-	setAllMotors(127);
-	sleep(150);
+	sleep(500);
 	stopMotors();
 }
 
 void lowerCatapult() {
-	primeShot();
+	primeShot
+	
+	();
 	clearTimer(T2);
 	while(time1[T2] < 2000 && sensorValue[catapultLim] == 0) { sleep(2); }
 	holdShot();
@@ -487,8 +489,11 @@ task autonomous()
 	sleep(250);
 	motor[hangMotor] = 0;
 
-	unlockRoutine();
 	
+	/* Unlock routine. */
+	deployRoutine();
+	
+	/*
 	autoTurn(180, 750);
 	
 	fireCatapult();
@@ -509,6 +514,7 @@ task autonomous()
 	fireCatapult();
 	
 	// and end.
+	*/
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -554,7 +560,6 @@ task usercontrol()
 		} else {
 			if(vexRT[Btn6U] && !vexRT[Btn6D] && sensorValue[catapultLim] == 0) {
 				primeShot();
-				startTask(lowerCatapultAsync);
 			} else if(!vexRT[Btn6U] && vexRT[Btn6D]) {
 				fireCatapult();
 			} else if(!vexRT[Btn6U] && !vexRT[Btn6D]) {
