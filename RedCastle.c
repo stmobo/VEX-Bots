@@ -25,12 +25,14 @@
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 #include "./CrossingWaves.c"
+#include "./gyroLib2.c"
 
 /* Loop parameters */
 float leftP = 3.0;
 float rightP = 3.0;
 float turnP = 2;
 int maxMotorOut = 63;
+int turnMotorOut = 32;
 
 float turnErrThreshold = 1.0;
 int driveErrThreshold = 5;
@@ -263,7 +265,7 @@ void autoDrive(float distance, int timeout) {
   */
 void autoTurn(float setpoint, int timeout) {
 	turnControl.gain = turnP;
-	turnControl.maxOutput = maxMotorOut;
+	turnControl.maxOutput = turnMotorOut;
 
 	resetTBHData(&turnControl, setpoint);
 
@@ -301,7 +303,7 @@ void autoTurn(float setpoint, int timeout) {
 
 void turnInterruptable(float setpoint) {
 	turnControl.gain = turnP;
-	turnControl.maxOutput = maxMotorOut;
+	turnControl.maxOutput = turnMotorOut;
 
 	resetTBHData(&turnControl, setpoint);
 
@@ -481,6 +483,8 @@ task autonomous()
 	autoMode = true;
 
 	resetGyro();
+	gyroInit(gyro);
+	
 	resetEncoders();
 
 	/* Raise the hang mechanism slightly. */
@@ -492,12 +496,12 @@ task autonomous()
 	/* Unlock routine. */
 	deployRoutine();
 
-	
-	//autoTurn(180, 750);
+
+	autoTurn(180, 750);
 
 	//fireCatapult();
-	
-	
+
+
   /*
 	autoTurn(0, 750);
 
@@ -587,6 +591,7 @@ task catSafety() {
 task usercontrol()
 {
 	resetGyro();
+	gyroReinit(gyro);
 
 	//startTask(LCDUpdate);
 
