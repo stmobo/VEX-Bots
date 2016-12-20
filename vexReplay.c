@@ -242,7 +242,8 @@ void updateAndWriteSnapshot() {
 	/* Save current state. */
 	currentState.left = left;
 	currentState.right = right;
-	currentState.hang = hangState;
+	currentState.hangUp = vexRT[Btn5U];
+	currentState.hangDown = vexRT[Btn5D];
 	currentState.catUp = vexRT[Btn6U];
 	currentState.catDown = vexRT[Btn6D];
 }
