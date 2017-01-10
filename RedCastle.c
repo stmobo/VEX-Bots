@@ -24,331 +24,66 @@
 #pragma userControlDuration(120)
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
-#include "./CrossingWaves.c"
-#include "./gyroLib2.c"
+#include "./Enterprise.c"
 
-/* Loop parameters */
-float leftP = 3.0;
-float rightP = 3.0;
-float turnP = 2;
+/* NOTE: old auto code is in autodrive.c */
+
+/* Control parameter constants. */
+const int deadband = 25;
+int manualTurnOut = 32;
+int absoluteMaxDrive = 96;
 int maxMotorOut = 63;
 int turnMotorOut = 32;
 
-float turnErrThreshold = 1.0;
-int driveErrThreshold = 5;
-
-int interruptableTurnTimeout = 2000;
-
 bool limSwitchEnabled = false;
 
-int dividePotentiometer(int sensorIn, int nSelects) {
-	int thresholds = 1024 / nSelects;
-	int n = sensorIn / thresholds;
-	return n;
-}
-
-tbhData turnControl;
-tbhData leftControl;
-tbhData rightControl;
-
-bool autoMode = false;
-
-void resetGyro() {
-	sensorValue[gyro] = 0;
-}
-
-void resetEncoders() {
-	resetMotorEncoder(LFront);
-	resetMotorEncoder(RFront);
-}
-
-/* Gyro positive = ccw, gyro negative = cw */
-float readGyro() {
-	float v = (float)SensorValue[gyro];
-	v /= 10;
-	return v;
-}
-/*
-task LCDUpdate() {
-	while(true) {
-		float curAngle = readGyro();
-
-		clearLCDLine(0);
-		clearLCDLine(1);
-
-		if(turnControl.active) {
-			displayLCDString(0, 0, "Turn Active: ");
-			displayLCDNumber(0, 13, (int)turnControl.setpoint);
-
-
-			displayLCDString(1, 0, "Err: ");
-			displayLCDNumber(1, 5, (int)turnControl.err);
-
-
-			displayLCDString(1, 10, "Out: ");
-			displayLCDNumber(1, 15, (int)turnControl.output);
-		} else if(autoMode) {
-			displayLCDString(0, 0, "Autonomous Active");
-		} else {
-			displayLCDString(0, 0, "Driver Controlled");
-		}
-
-		sleep(5);
-	}
-}
-*/
-void stopMotors() {
-	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
-}
-
-float wheelCircumference = 2 * PI * 2; // 4in wheel diameter = 2in radius.
-float ticksPerRevolution = 392;
-
-int inToEncoderTicks(float inches) {
-	float t = inches * (ticksPerRevolution / wheelCircumference);
-	return t;
+struct controlState {
+	signed char yAxis;	/* Raw Ch2 from stick */
+	signed char zAxis;	/* Raw Ch1 from stick */
+	
+	bool catUp;		/* Button 6D */
+	bool catDown;		/* Button 6U */
+	bool catReset;		/* Button 7U */
+	
+	bool hangUp;		/* Button 5U */
+	bool hangDown;		/* Button 5D */
+	
+	bool turnRight;		/* Button 8U */
+	bool turnLeft;		/* Button 8D */
+	
+	unsigned int catState;
 };
+controlState currentState;
+replayData replay;
 
-// debugger state:
-int lastEncoderDelta = 0;
-task autoDriveDebug() {
-	int state = 0;
-	clearDebugStream();
-	//stopTask(LCDUpdate); // prevent conflicts
-	while(true) {
-		clearLCDLine(0);
-		clearLCDLine(1);
-		if(state == 0) {
-			// Display Left-Side data:
-			displayLCDString(0, 0, "Val:");
-			displayLCDString(1, 0, "Err:");
-
-			datalogDataGroupStart();
-			dataLogAddValue(0, getMotorEncoder(LFront));
-			dataLogAddValue(1, getMotorEncoder(RFront));
-			dataLogAddValue(2, leftControl.err);
-			dataLogAddValue(3, rightControl.err);
-			dataLogAddValue(4, leftControl.output);
-			dataLogAddValue(5, rightControl.output);
-			dataLogAddValue(6, lastEncoderDelta);
-			datalogDataGroupEnd();
-
-
-
-			displayLCDNumber(0, 4, getMotorEncoder(LFront));
-			displayLCDNumber(1, 4, leftControl.err);
-		} else if(state == 1) {
-			// Display other data:
-			displayLCDString(0, 0, "Del:"); // delta
-			displayLCDString(1, 0, "Sta:"); // state
-
-			displayLCDNumber(0, 4, lastEncoderDelta);
-
-			if(leftControl.active) {
-				displayLCDChar(1, 4, 'L');
-			}
-
-			if(rightControl.active) {
-				displayLCDChar(1, 5, 'R');
-			}
-
-			displayLCDNumber(1, 6, (int)leftControl.output);
-			displayLCDChar(1, 9, '/');
-			displayLCDNumber(1, 10, (int)rightControl.output);
-		} else /* state == 2 */ {
-			// Display Right-Side Data:
-			displayLCDString(0, 0, "Val:");
-			displayLCDString(1, 0, "Err:");
-
-			displayLCDNumber(0, 4, getMotorEncoder(RFront));
-			displayLCDNumber(1, 4, rightControl.err);
-		}
-
-		if(nLCDButtons == 1) {
-			state = 0;
-		} else if(nLCDButtons == 2) {
-			state = 1;
-		} else if(nLCDButtons == 4) {
-			state = 2;
-		}
-		sleep(50);
-	}
+/* Reset state (for when switching from auto->driver) */
+void resetState() {
+	currentState.yAxis = 0;
+	currentState.zAxis = 0;
+	
+	currentState.catUp = false;
+	currentState.catDown = false;
+	currentState.catReset = false;
+	currentState.hangUp = false;
+	currentState.hangDown = false;
+	currentState.turnLeft = false;
+	currentState.turnRight = false;
 }
 
-/* Drives a given distance forward or backwards.
- * (Negative values drive the robot backwards.)
- *
- * i.e:
- *  autoDrive(2.0) -> drive 2.0 feet forward
- *  autoDrive(-2.0) -> drive 2.0 feet backward
- *
- * This function is not user-interruptable, but will timeout (if timeout > 0).
- */
+/* Completely initialize state (from preauto->auto) */
+void initState() {
+	resetState();
+	currentState.catState = 0;
 
-void autoDrive(float distance, int timeout) {
-	leftControl.gain = leftP;
-	rightControl.gain = rightP;
-
-	leftControl.maxOutput = rightControl.maxOutput = maxMotorOut;
-
-	int encoderDelta = -1 * inToEncoderTicks(distance);
-	lastEncoderDelta = encoderDelta;
-
-	resetMotorEncoder(LFront);
-	resetMotorEncoder(RFront);
-
-	resetTBHData(&leftControl, encoderDelta);
-	resetTBHData(&rightControl, encoderDelta);
-
-	bool doTimeout = (timeout > 0);
-
-	int dI = 0;
-
-	if(doTimeout)
-		clearTimer(T2);
-
-	writeDebugStreamLine("Beginning autoDrive.");
-
-	while(true) {
-		bool lCross = leftControl.firstCross;
-		bool rCross = rightControl.firstCross;
-		tbhControlCycle(&leftControl, getMotorEncoder(LFront));
-		tbhControlCycle(&rightControl, getMotorEncoder(RFront));
-
-		/* Test for:
-		* More than 1 setpoint crossing.
-		* Low output / oscilliation.
-		* Close to setpoint.
-		*/
-		if(!lCross && !rCross &&
-			(abs((int)leftControl.output) < 10) && (abs((int)rightControl.output) < 10) &&
-			(abs(leftControl.err) < driveErrThreshold) && (abs(rightControl.err) < driveErrThreshold))
-		{
-			writeDebugStreamLine("autoDrive terminating normally");
-			stopMotors();
-			leftControl.active = false;
-			rightControl.active = false;
-			return;
-		}
-
-		leftControl.crossed = false;
-		rightControl.crossed = false;
-
-		if(doTimeout) {
-				if(time1[T2] > timeout) {
-					writeDebugStreamLine("autoDrive timed out");
-				stopMotors();
-				leftControl.active = false;
-				rightControl.active = false;
-				return;
-			}
-		}
-
-		dI++;
-		writeDebugStreamLine("autoDrive, i=%i", dI);
-
-		// dirty hack: I should probably figure out why that's happening, but it's okay for now
-		motor[LFront] = motor[LBack] = leftControl.output;
-		motor[RFront] = motor[RBack] = rightControl.output;
-
-		sleep(5);
-	}
 }
 
-/* Note: for a turn to 270 degrees (or any angle above 180)
- * A turn to (angle-360) is better, since it turns a shorter distance (clockwise instead of ccw)
- * Maybe use this library to fix that?: https://github.com/jpearman/RobotCLibs/blob/master/gyroLib/gyroLib2.c
- */
-
- /* Turn to a given heading as indicated by the gyro.
-  * Not user-interruptable, but will timeout if timeout > 0.
-  */
-void autoTurn(float setpoint, int timeout) {
-	turnControl.gain = turnP;
-	turnControl.maxOutput = turnMotorOut;
-
-	resetTBHData(&turnControl, setpoint);
-
-	if(timeout > 0)
-		clearTimer(T2);
-
-	while(true) {
-		bool lastCross = turnControl.firstCross;
-		tbhControlCycle(&turnControl, readGyro());
-
-		if(!lastCross && turnControl.crossed && abs((int)turnControl.output) < 10) {
-			stopMotors();
-			turnControl.active = false;
-			return;
-		}
-
-		turnControl.crossed = false;
-
-		if((timeout > 0) && (time1[T2] > timeout)) {
-			stopMotors();
-			turnControl.active = false;
-			return;
-		}
-
-		motor[LFront] = motor[LBack] = -1*turnControl.output;
-		motor[RFront] = motor[RBack] = turnControl.output;
-
-		sleep(2);
+void clearReplay() {
+	for(unsigned int i=0;i<10802;i++) {
+		replay.streamData[i] = 0;
 	}
-}
-
- /* Turn to a given heading as indicated by the gyro.
-  * This will automatically timeout, and can also be interrupted by any input on the controller.
-  */
-
-void turnInterruptable(float setpoint) {
-	turnControl.gain = turnP;
-	turnControl.maxOutput = turnMotorOut;
-
-	resetTBHData(&turnControl, setpoint);
-
-	clearTimer(T2);
-
-	while(true) {
-		bool lastCross = turnControl.firstCross;
-		tbhControlCycle(&turnControl, readGyro());
-
-		if(!lastCross && turnControl.crossed && abs((int)turnControl.output) < 10) {
-			stopMotors();
-			turnControl.active = false;
-			return;
-		}
-
-		if(turnControl.crossed)
-			turnControl.crossed = false;
-
-		motor[LFront] = motor[LBack] = -1*turnControl.output;
-		motor[RFront] = motor[RBack] = turnControl.output;
-
-		sleep(2);
-
-		if(time1[T2] > interruptableTurnTimeout) {
-			stopMotors();
-			turnControl.active = false;
-			return;
-		}
-
-		/* Test for user interrupt: */
-		if(
-			abs(vexRT[Ch2]) > 5 ||
-			abs(vexRT[Ch3]) > 5 ||
-			vexRT[Btn5D] ||
-			vexRT[Btn5U] ||
-			vexRT[Btn7U] ||
-			vexRT[Btn7R] ||
-			vexRT[Btn7D] ||
-			vexRT[Btn7L]
-		) {
-			stopMotors();
-			turnControl.active = false;
-			return;
-		}
-	}
+	
+	replay.streamIndex = 0;
+	replay.streamSize = 0;
 }
 
 void catapultDown() {
@@ -372,187 +107,24 @@ void catapultStop() {
 	motor[leftUpperIntake] = 0;
 }
 
-void doHang() {
-	motor[hangMotor] = 127;
-	sleep(500);
-	motor[hangMotor] = -127;
-	sleep(1000);
-	motor[hangMotor] = 0;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-//                          Pre-Autonomous Functions
-//
-// You may want to perform some actions before the competition starts. Do them in the
-// following function.
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-
-void pre_auton()
-{
-	resetGyro();
-	resetEncoders();
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                 Autonomous Task
-//
-// This task is used to control your robot during the autonomous phase of a VEX Competition.
-// You must modify the code to add your own robot specific commands here.
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-
-void autoShoot() {
-	catapultDown();
-	if(limSwitchEnabled) {
-		clearTimer(T2);
-		while(time1[T2] < 750 && sensorValue[catapultLim] == 0) { sleep(2);}
-	} else {
-		sleep(750);
-	}
-	catapultStop();
-	sleep(50);
-	catapultUp();
-}
-
-bool onRightSide = true;
-
-/* Drive forward and back to unlock the mechanism. */
-void doShakeRoutine() {
-	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = -127;
-	sleep(250);
-	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 127;
-	sleep(250);
+void stopMotors() {
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
 }
 
-void autoTestRoutine() {
-	writeDebugStreamLine("Beginning auto code.");
-
-	datalogClear();
-
-	/*
-	Auto test routine:
-	*/
-	startTask(autoDriveDebug);
-	autoDrive(7.0 * 12.0, -1);
-
-	writeDebugStreamLine("Control fell through.");
-
-	while(true) {sleep(5);}
-}
-
-void setAllMotors(short val) {
-	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = val;
-}
-
-void setLeftMotors(short val) {
-	motor[LFront] = motor[LBack] = val;
-}
-
-void setRightMotors(short val) {
-	motor[RFront] = motor[RBack] = val;
-}
-
-void deployRoutine() {
-	setAllMotors(-127);
-	sleep(1000);
-	setAllMotors(127);
-	sleep(100);
+void stopAllMotors() {
 	stopMotors();
-}
-
-void lowerCatapult() {
-	catapultDown();
-	clearTimer(T2);
-	while(time1[T2] < 1250 && sensorValue[catapultLim] == 0) { sleep(2); }
 	catapultStop();
-}
-
-void fireCatapult() {
-	clearTimer(T2);
-	catapultDown();
-	while(time1[T2] < 50 && sensorValue[catapultLim] > 0) { sleep(2); };
-	catapultStop();
-}
-
-task autonomous()
-{
-	autoMode = true;
-
-	resetGyro();
-	gyroInit(gyro);
-	
-	resetEncoders();
-
-	/* Raise the hang mechanism slightly. */
-	motor[hangMotor] = 16;
-	sleep(250);
 	motor[hangMotor] = 0;
-
-
-	/* Unlock routine. */
-	deployRoutine();
-
-
-	autoTurn(180, 750);
-
-	//fireCatapult();
-
-
-  /*
-	autoTurn(0, 750);
-
-	autoDrive(3 * 12.0, 1500);
-
-	autoTurn(-90, 750);
-
-	autoDrive(3 * 12.0, 1500);
-
-	autoTurn(-135, 750);
-
-	autoDrive(2 * 12.0, 1500);
-
-	fireCatapult();
-
-	// and end.
-	*/
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                 User Control Task
-//
-// This task is used to control your robot during the user control phase of a VEX Competition.
-// You must modify the code to add your own robot specific commands here.
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-
-/* Manual control parameters: */
-bool tankDriveActive = false;
-const int deadband = 25;
-int manualTurnOut = 32;
-
-int absoluteMaxDrive = 96;
-
-task lowerCatapultAsync() {
-	catapultDown();
-	clearTimer(T2);
-	while(time1[T2] < 2000 && sensorValue[catapultLim] == 0) { sleep(2); }
-	catapultStop();
-}
-
-void intakeReset()
-{
-	if (vexRT[Btn7U] && !SensorValue[catapultLim])
-	{
-		motor[rightLowerIntake] = 127;
-		motor[leftLowerIntake] = 127;
-		motor[rightUpperIntake] = 127;
-		motor[leftUpperIntake] = 127;
-	}
+void intakeReset() {
+		if (currentState.catReset && !SensorValue[catapultLim])
+		{
+			motor[rightLowerIntake] = 127;
+			motor[leftLowerIntake] = 127;
+			motor[rightUpperIntake] = 127;
+			motor[leftUpperIntake] = 127;
+		}
 }
 
 void fireRoutine() {
@@ -567,134 +139,156 @@ void fireRoutine() {
 	}
 }
 
-/*
- * Background safety checks.
- *  If the catapult limit switch has been hit and then released, the catapult motors should be off.
- */
-task catSafety() {
-	bool cocked = false;
-	while(true) {
-		if(cocked) {
-			if(sensorValue[catapultLim] == 0) {
+void fireControl() {
+	if(!limSwitchEnabled) {
+		if(currentState.catDown && !currentState.catUp) {
+			catapultDown();
+		} else if(!currentState.catDown && currentState.catUp) {
+			catapultUp();
+		} else if(!currentState.catDown && !currentState.catUp) {
+			catapultStop();
+		}
+	} else {
+		/*
+		 * CATAPULT STATE MACHINE:
+		 *
+		 * state 0 -> catapult moving to switch
+		 * state 1 -> catapult halted at switch
+		 * state 2 -> catapult ready to fire
+		 */
+		if(currentState.catState == 0) {
+			if(currentState.catDown) {
+				catapultDown();
+			} else if(currentState.catUp) {
+				catapultUp();
+			} else {
 				catapultStop();
-				cocked = false;
 			}
-		} else {
+
 			if(sensorValue[catapultLim] == 1) {
-				cocked = true;
+				catapultStop();
+				currentState.catState = 1;
+				clearTimer(T3);
+			}
+		} else if(currentState.catState == 1) {
+			if(!currentState.catDown) {
+				if(time1[T3] > 150) {
+					currentState.catState = 2;
+				}
+			} else if(currentState.catUp) {
+				catapultUp();
+			} else {
+				catapultStop();
+			}
+
+			if(sensorValue[catapultLim] == 0) {
+				currentState.catState = 0;
+			}
+		} else if(currentState.catState == 2) {
+			if(currentState.catDown) {
+				fireRoutine();
+			} else if(currentState.catUp) {
+				catapultUp();
+			} else {
+				catapultStop();
+			}
+
+			if(sensorValue[catapultLim] == 0) {
+				currentState.catState = 0;
 			}
 		}
-		sleep(2);
 	}
 }
 
-task usercontrol()
-{
-	resetGyro();
-	gyroReinit(gyro);
-
-	//startTask(LCDUpdate);
-
-	/*
-	 * state 0 -> catapult moving to switch
-	 * state 1 -> catapult halted at switch
-	 * state 2 -> catapult ready to fire
-	 */
-	short catState = 0;
-
-	while (true)
-	{
-		intakeReset();
-
-		/* Fire control: */
-		if(!limSwitchEnabled) {
-			if(vexRT[Btn6U] && !vexRT[Btn6D]) {
-				catapultDown();
-			} else if(!vexRT[Btn6U] && vexRT[Btn6D]) {
-				catapultUp();
-			} else if(!vexRT[Btn6U] && !vexRT[Btn6D]) {
-				catapultStop();
-			}
-		} else {
-			if(catState == 0) {
-				if(vexRT[Btn6U]) {
-					catapultDown();
-				} else if(vexRT[Btn6D]) {
-					catapultUp();
-				} else {
-					catapultStop();
-				}
-
-				if(sensorValue[catapultLim] == 1) {
-					catapultStop();
-					catState = 1;
-					clearTimer(T3);
-				}
-			} else if(catState == 1) {
-				if(!vexRT[Btn6U]) {
-					if(time1[T3] > 150) {
-						catState = 2;
-					}
-				} else if(vexRT[Btn6D]) {
-					catapultUp();
-				} else {
-					catapultStop();
-				}
-
-				if(sensorValue[catapultLim] == 0) {
-					catState = 0;
-				}
-			} else if(catState == 2) {
-				if(vexRT[Btn6U]) {
-					fireRoutine();
-				} else if(vexRT[Btn6D]) {
-					catapultUp();
-				} else {
-					catapultStop();
-				}
-
-				if(sensorValue[catapultLim] == 0) {
-					catState = 0;
-				}
-			}
-		}
-
-		/* Hang control */
-		if( vexRT[Btn5U] && !vexRT[Btn5D] ) {
-			motor[hangMotor] = 127;
-		} else if( vexRT[Btn5D] && !vexRT[Btn5U] ) {
-			motor[hangMotor] = -127;
-		} else if( !vexRT[Btn5D] && !vexRT[Btn5U] ) {
-			motor[hangMotor] = 0;
-		}
-
-		/* Movement control: */
-		if( vexRT[Btn8D] || vexRT[Btn8U] ) {
-			/* Rotation inputs: */
-			motor[LBack] = motor[LFront] = (vexRT[Btn8D] ? -1*manualTurnOut : manualTurnOut);
-			motor[RBack] = motor[RFront] = (vexRT[Btn8D] ? manualTurnOut : -1*manualTurnOut);
-		} else {
-			if(tankDriveActive) {
-				/* Tank Drive inputs: */
-				motor[LBack] = motor[LFront]
-					= (abs(vexRT[Ch3]) > absoluteMaxDrive) ? (sgn(vexRT[Ch3])*absoluteMaxDrive) : vexRT[Ch3];
-				motor[RBack] = motor[RFront]
-						= (abs(vexRT[Ch2]) > absoluteMaxDrive) ? (sgn(vexRT[Ch2])*absoluteMaxDrive) : vexRT[Ch2];
-			} else {
-				short yAxis = (abs(vexRT[Ch2]) < deadband) ? 0 : -vexRT[Ch2];
-				short zAxis = (abs(vexRT[Ch1]) < deadband) ? 0 : -vexRT[Ch1];
-
-				short right = yAxis - zAxis;
-				short left = yAxis + zAxis;
-
-				right = (abs(right) > absoluteMaxDrive) ? (sgn(right)*absoluteMaxDrive) : right;
-				left = (abs(left) > absoluteMaxDrive) ? (sgn(left)*absoluteMaxDrive) : left;
-
-				motor[RFront] = motor[RBack] = right;
-				motor[LFront] = motor[LBack] = left;
-			}
-		}
-
-		sleep(1);
+void hangControl() {
+	if( currentState.hangUp && !currentState.hangDown ) {
+		motor[hangMotor] = 127;
+	} else if( currentState.hangDown && !currentState.hangUp ) {
+		motor[hangMotor] = -127;
+	} else if( !currentState.hangDown && !currentState.hangUp ) {
+		motor[hangMotor] = 0;
 	}
+}
+
+void moveControl() {
+	if( currentState.turnLeft || currentState.turnRight ) {
+		/* Rotation inputs: */
+		motor[LBack] = motor[LFront] = (currentState.turnLeft ? -1*manualTurnOut : manualTurnOut);
+		motor[RBack] = motor[RFront] = (currentState.turnLeft ? manualTurnOut : -1*manualTurnOut);
+	} else {
+		short yAxis = (abs(currentState.yAxis) < deadband) ? 0 : -currentState.yAxis;
+		short zAxis = (abs(currentState.zAxis) < deadband) ? 0 : -currentState.zAxis;
+
+		short right = yAxis - zAxis;
+		short left = yAxis + zAxis;
+
+		right = (abs(right) > absoluteMaxDrive) ? (sgn(right)*absoluteMaxDrive) : right;
+		left = (abs(left) > absoluteMaxDrive) ? (sgn(left)*absoluteMaxDrive) : left;
+
+		motor[RFront] = motor[RBack] = right;
+		motor[LFront] = motor[LBack] = left;
+	}
+}
+
+void controlLoopIteration() {
+	intakeReset();
+	fireControl();
+	hangControl();
+	moveControl();
+}
+
+#define TEST_BIT(x, i) (((x)&(1<<(i))) > 0)
+
+void replayToControlState() {
+	currentState.yAxis = (signed char)readNextByte(&replay);
+	currentState.zAxis = (signed char)readNextByte(&replay);
+
+	/* Bit | Button
+	 *  0  | Catapult Up (6D)
+	 *  1  | Catapult Down (6U)
+	 *  2  | Catapult Reset (7U)
+	 *  3  | Hang Up (5U)
+	 *  4  | Hang Down (5D)
+	 *  5  | Turn Right (8U)
+	 *  6  | Turn Left (8D)
+	 *  7  | <reserved>
+	 */
+	unsigned char buttonState = readNextByte(&replay);
+	
+	currentState.catUp = TEST_BIT(buttonState, 0);
+	currentState.catDown = TEST_BIT(buttonState, 1);
+	currentState.catReset = TEST_BIT(buttonState, 2);
+	currentState.hangUp = TEST_BIT(buttonState, 3);
+	currentState.hangDown = TEST_BIT(buttonState, 4);
+	currentState.turnRight = TEST_BIT(buttonState, 5);
+	currentState.turnLeft = TEST_BIT(buttonState, 6);
+}
+
+void controllerToControlState() {
+	currentState.yAxis = vexRT[Ch2];
+	currentState.zAxis = vexRT[Ch1];
+	
+	currentState.catUp = (vexRT[Btn6D] > 0);
+	currentState.catDown = (vexRT[Btn6U] > 0);
+	currentState.catReset = (vexRT[Btn7U] > 0);
+	currentState.hangUp = (vexRT[Btn5U] > 0);
+	currentState.hangDown = (vexRT[Btn5D] > 0);
+	currentState.turnRight = (vexRT[Btn8U] > 0);
+	currentState.turnLeft = (vexRT[Btn8D] > 0);
+}
+
+void controlStateToReplay() {
+	writeNextByte(&replay, (unsigned char)currentState.yAxis);
+	writeNextByte(&replay, (unsigned char)currentState.zAxis);
+	
+	unsigned char buttonState = 0;
+	buttonState |= (currentState.catUp ? 1 : 0);
+	buttonState |= (currentState.catDown ? 1 : 0) << 1;
+	buttonState |= (currentState.catReset ? 1 : 0) << 2;
+	buttonState |= (currentState.hangUp ? 1 : 0) << 3;
+	buttonState |= (currentState.hangDown ? 1 : 0) << 4;
+	buttonState |= (currentState.turnRight ? 1 : 0) << 5;
+	buttonState |= (currentState.turnLeft ? 1 : 0) << 6;
+	
+	writeNextByte(&replay, buttonState);
 }
