@@ -264,5 +264,5 @@ void controlStateToReplay() {
 	buttonState |= (currentState.turnRight ? 1 : 0) << 5;
 	buttonState |= (currentState.turnLeft ? 1 : 0) << 6;
 	
-	writeNextByte(&replay, buttonState);
+	writeByte(&replay, buttonState);
 }
