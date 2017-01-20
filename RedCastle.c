@@ -252,8 +252,8 @@ void controllerToControlState() {
 }
 
 void controlStateToReplay() {
-	writeNextByte(&replay, (unsigned char)currentState.yAxis);
-	writeNextByte(&replay, (unsigned char)currentState.zAxis);
+	writeByte(&replay, (unsigned char)currentState.yAxis);
+	writeByte(&replay, (unsigned char)currentState.zAxis);
 	
 	unsigned char buttonState = 0;
 	buttonState |= (currentState.catUp ? 1 : 0);
