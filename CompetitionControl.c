@@ -3,6 +3,7 @@
 #pragma config(Sensor, in2,    autoSelector,   sensorPotentiometer)
 #pragma config(Sensor, in3,    posSelector,    sensorPotentiometer)
 #pragma config(Sensor, dgtl1,  catapultLim,    sensorTouch)
+#pragma config(Sensor, dgtl2,  upperLim,       sensorTouch)
 #pragma config(Sensor, I2C_1,  leftEnc,        sensorQuadEncoderOnI2CPort,    , AutoAssign )
 #pragma config(Sensor, I2C_2,  rightEnc,       sensorQuadEncoderOnI2CPort,    , AutoAssign )
 #pragma config(Motor,  port1,           RBack,         tmotorVex393HighSpeed_HBridge, openLoop)

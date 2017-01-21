@@ -9,22 +9,23 @@ int absoluteMaxDrive = 96;
 int maxMotorOut = 63;
 int turnMotorOut = 32;
 
-bool limSwitchEnabled = false;
+bool limSwitchEnabled = true;
+bool catStateEnabled = true;
 
 struct controlState {
 	signed char yAxis;	/* Raw Ch2 from stick */
 	signed char zAxis;	/* Raw Ch1 from stick */
-	
+
 	bool catUp;		/* Button 6D */
 	bool catDown;		/* Button 6U */
 	bool catReset;		/* Button 7U */
-	
+
 	bool hangUp;		/* Button 5U */
 	bool hangDown;		/* Button 5D */
-	
+
 	bool turnRight;		/* Button 8U */
 	bool turnLeft;		/* Button 8D */
-	
+
 	unsigned int catState;
 };
 controlState currentState;
@@ -34,7 +35,7 @@ replayData replay;
 void resetState() {
 	currentState.yAxis = 0;
 	currentState.zAxis = 0;
-	
+
 	currentState.catUp = false;
 	currentState.catDown = false;
 	currentState.catReset = false;
@@ -55,7 +56,7 @@ void clearReplay() {
 	for(unsigned int i=0;i<10802;i++) {
 		replay.streamData[i] = 0;
 	}
-	
+
 	replay.streamIndex = 0;
 	replay.streamSize = 0;
 }
@@ -68,10 +69,12 @@ void catapultDown() {
 }
 
 void catapultUp() {
-	motor[rightLowerIntake] = -127;
-	motor[rightUpperIntake] = -127;
-	motor[leftLowerIntake] = -127;
-	motor[leftUpperIntake] = -127;
+	if(!limSwitchEnabled || (sensorValue[upperLim] == 0)) {
+		motor[rightLowerIntake] = -127;
+		motor[rightUpperIntake] = -127;
+		motor[leftLowerIntake] = -127;
+		motor[leftUpperIntake] = -127;
+	}
 }
 
 void catapultStop() {
@@ -114,7 +117,7 @@ void fireRoutine() {
 }
 
 void fireControl() {
-	if(!limSwitchEnabled) {
+	if(!limSwitchEnabled || !catStateEnabled) {
 		if(currentState.catDown && !currentState.catUp) {
 			catapultDown();
 		} else if(!currentState.catDown && currentState.catUp) {
@@ -228,7 +231,7 @@ void replayToControlState() {
 	 *  7  | <reserved>
 	 */
 	unsigned char buttonState = readNextByte(&replay);
-	
+
 	currentState.catUp = TEST_BIT(buttonState, 0);
 	currentState.catDown = TEST_BIT(buttonState, 1);
 	currentState.catReset = TEST_BIT(buttonState, 2);
@@ -241,7 +244,7 @@ void replayToControlState() {
 void controllerToControlState() {
 	currentState.yAxis = vexRT[Ch2];
 	currentState.zAxis = vexRT[Ch1];
-	
+
 	currentState.catUp = (vexRT[Btn6D] > 0);
 	currentState.catDown = (vexRT[Btn6U] > 0);
 	currentState.catReset = (vexRT[Btn7U] > 0);
@@ -254,7 +257,7 @@ void controllerToControlState() {
 void controlStateToReplay() {
 	writeByte(&replay, (unsigned char)currentState.yAxis);
 	writeByte(&replay, (unsigned char)currentState.zAxis);
-	
+
 	unsigned char buttonState = 0;
 	buttonState |= (currentState.catUp ? 1 : 0);
 	buttonState |= (currentState.catDown ? 1 : 0) << 1;
@@ -263,6 +266,6 @@ void controlStateToReplay() {
 	buttonState |= (currentState.hangDown ? 1 : 0) << 4;
 	buttonState |= (currentState.turnRight ? 1 : 0) << 5;
 	buttonState |= (currentState.turnLeft ? 1 : 0) << 6;
-	
+
 	writeByte(&replay, buttonState);
 }
