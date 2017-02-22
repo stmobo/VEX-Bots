@@ -26,12 +26,51 @@
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 
+#define DEBUG
+
+#include "./Enterprise.c"
 #include "./RedCastle.c"
 /* Recorder control stub. */
 
-void pre_auton() {}
+char* illuminati_skills = "ilmskills";
+char* illuminati_routine = "ilmroutine";
+char* slot1 = "slot1";
+char* slot2 = "slot2";
+char* slot3 = "slot3";
+
+char* selectAutonomous() {
+	int pos = sensorValue[autoSelector];
+
+	if(pos < 727) {					// Illuminati Skills
+		return illuminati_skills;
+	} else if(pos < 1920) {	// Illuminati routine
+		return illuminati_routine;
+	} else if(pos < 2678) {	// Off
+		return NULL;
+	} else if(pos < 3200) {	// A1
+		return slot1;
+	} else if(pos < 3768) { // A2
+		return slot2;
+	} else if(pos < 4080) {	// A3
+		return slot3;
+	}
+
+	return NULL;
+}
+
+void pre_auton() {
+}
 
 task autonomous() {
+	char* filename = selectAutonomous();
+
+	clearReplay();
+
+	if(filename != NULL) {
+		writeDebugStreamLine(filename);
+		loadReplayFromFile(filename, &replay);
+	}
+
 	replay.streamIndex = 0;
 	initState();
 
@@ -40,8 +79,8 @@ task autonomous() {
 		controlLoopIteration();
 		sleep((int)deltaT);
 	}
-	
-	stopAllMotors();
+
+	stopAllMotorsCustom();
 }
 
 unsigned int currentTime = 0;
@@ -51,51 +90,83 @@ unsigned int currentTime = 0;
  *  For a regular match autonomous recording, this should be 15000 milliseconds (= 15 seconds).
  *  For an Auto Skills recording, this should be 60000 milliseconds (= 60 seconds = 1 minute).
  */
-unsigned int timelimit = 60000;
+unsigned int timelimit = 61000;
 
 task usercontrol()
 {
 	initState();
 	clearReplay();
-	
+
 	clearLCDLine(0);
 	clearLCDLine(1);
 	displayLCDCenteredString(0, "Ready to record.");
-	displayLCDCenteredString(1, "Press any button or move stick.");
-	
+	displayLCDCenteredString(1, "Do stuff.");
+
 	while (true)
 	{
 		if(abs(vexRT[Ch2]) > deadband || abs(vexRT[Ch1]) > deadband) {
 			break;
 		}
-		
+
 		if(vexRT[Btn6D] || vexRT[Btn6U] || vexRT[Btn7U] ||
 		   vexRT[Btn5U] || vexRT[Btn5D] || vexRT[Btn8U] || vexRT[Btn8D])
 		{
 			break;
 		}
-		
+
 		sleep(5);
 	}
-	
+
 	while (true)
 	{
 		controllerToControlState();
 		controlLoopIteration();
-		
-		controlStateToReplay();
-		
+
+		if(timelimit > 0) {
+			controlStateToReplay();
+		}
+
 		currentTime += (int)deltaT;
-		
-		if(currentTime > timelimit) {
+
+		if(vexRT[Btn7L]) {
 			break;
 		}
-		
+
+		if((currentTime > timelimit) && (timelimit > 0)) {
+			break;
+		}
+
 		sleep((int)deltaT);
 	}
-	
+
 	replay.streamSize = replay.streamIndex+1;
-	
+
 	stopAllMotors();
-	querySaveReplay(&replay);
+
+	bool doSave = false;
+	while(true) {
+		displayLCDCenteredString(0, "Save replay?");
+		if(!doSave) {
+			displayLCDCenteredString(1, "[No] Yes ");
+		} else {
+			displayLCDCenteredString(1, " No [Yes]");
+		}
+
+		if(nLCDButtons & 0x01) {
+			doSave = false;
+		} else if(nLCDButtons & 0x02) {
+			break;
+		} else if(nLCDButtons & 0x04) {
+			doSave = true;
+		}
+	}
+
+	char* filename = selectAutonomous();
+
+	if(doSave && (filename != NULL)) {
+		writeDebugStream(filename);
+		saveReplayToFile(filename, &replay);
+		clearLCDLine(0);
+		displayLCDCenteredString(0, "Save done.");
+	}
 }

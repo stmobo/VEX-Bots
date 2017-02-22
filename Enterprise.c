@@ -11,10 +11,6 @@ struct replayData {
 	bool loaded;
 };
 
-const char* skillsFilename = "skills";
-const char* compFilename = "competition";
-const char* tempFilename = "temp";
-
 void initReplayData(replayData* data) {
 	data->streamIndex = 0;
 	data->streamSize = 0;
@@ -23,16 +19,16 @@ void initReplayData(replayData* data) {
 
 unsigned char readNextByte(replayData* data) {
 	unsigned char ret = data->streamData[data->streamIndex];
-	data->streamIndex++;
+	data->streamIndex += 1;
 	return ret;
 }
 
-void writeByte(replayData* data, unsigned char byte) {
-	data->streamData[data->streamIndex] = byte;
-	data->streamIndex++;
+void writeByte(replayData* data, unsigned char dat) {
+	data->streamData[data->streamIndex] = dat;
+	data->streamIndex += 1;
 }
 
-void findFile(const char* name, flash_file* out) {
+void findFile(char* name, flash_file* out) {
 	flash_file* cur = out;
 
 	if(RCFS_FindFirstFile(cur) < 0)
@@ -53,7 +49,7 @@ void findFile(const char* name, flash_file* out) {
  *  n bytes: stream data
  */
 
-void saveReplayToFile(const char* name, replayData* repSt) {
+void saveReplayToFile(char* name, replayData* repSt) {
 	// discarded parameters to RCFS_GetFile
 	unsigned char* tmp1;
 	int tmp2;
@@ -62,9 +58,9 @@ void saveReplayToFile(const char* name, replayData* repSt) {
 	writeDebugStreamLine("Killed motors, now finding file:");
 	writeDebugStreamLine(name);
 #endif
-	
+
 	repSt->streamSize = repSt->streamIndex+1;
-	
+
 	flash_file fHandle;
 	findFile(name, &fHandle);
 	if(fHandle.addr == NULL) {
@@ -122,12 +118,12 @@ void loadReplayFromFile(const char* name, replayData* repSt) {
 	clearLCDLine(1);
 #ifdef DEBUG
 	writeDebugStreamLine("Attempting to load stream:");
-	writeDebugStreamLine(compFilename);
+	writeDebugStreamLine(name);
 #endif
 	displayLCDCenteredString(0, "Finding file...");
-	
+
 	flash_file fHandle;
-	findFile(compFilename, &fHandle);
+	findFile(name, &fHandle);
 	if(fHandle.addr != NULL) {
 #ifdef DEBUG
 		writeDebugStreamLine("Found file!");
@@ -150,46 +146,5 @@ void loadReplayFromFile(const char* name, replayData* repSt) {
 #ifdef DEBUG
 		writeDebugStreamLine("Could not find file.");
 #endif
-	}
-}
-
-void querySaveReplay(replayData* repSt) {
-	bool doSave = false;
-	while(true) {
-		displayLCDCenteredString(0, "Save replay?");
-		if(!doSave) {
-			displayLCDCenteredString(1, "[No] Yes ");
-		} else {
-			displayLCDCenteredString(1, " No [Yes]");
-		}
-
-		if(nLCDButtons & 0x01) {
-			doSave = false;
-		} else if(nLCDButtons & 0x02) {
-			break;
-		} else if(nLCDButtons & 0x04) {
-			doSave = true;
-		}
-	}
-
-	if(!doSave)
-		return;
-		
-	sleep(250);
-
-	displayLCDCenteredString(0, "Select slot:");
-	displayLCDCenteredString(1, "Skls|Comp|Temp");
-
-	while(true) {
-		if(nLCDButtons & 0x01) {
-			saveReplayToFile(skillsFilename, repSt);
-			return;
-		} else if(nLCDButtons & 0x02) {
-			saveReplayToFile(compFilename, repSt);
-			return;
-		} else if(nLCDButtons & 0x04) {
-			saveReplayToFile(tempFilename, repSt);
-			return;
-		}
 	}
 }

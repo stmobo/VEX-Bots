@@ -1,5 +1,3 @@
-#include "./Enterprise.c"
-
 /* NOTE: old auto code is in autodrive.c */
 
 /* Control parameter constants. */
@@ -88,7 +86,7 @@ void stopMotors() {
 	motor[LBack] = motor[LFront] = motor[RBack] = motor[RFront] = 0;
 }
 
-void stopAllMotors() {
+void stopAllMotorsCustom() {
 	stopMotors();
 	catapultStop();
 	motor[hangMotor] = 0;
@@ -208,9 +206,9 @@ void moveControl() {
 }
 
 void controlLoopIteration() {
-	intakeReset();
-	fireControl();
-	hangControl();
+	//intakeReset();
+	//fireControl();
+	//hangControl();
 	moveControl();
 }
 
