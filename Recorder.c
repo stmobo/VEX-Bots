@@ -32,44 +32,110 @@
 #include "./RedCastle.c"
 /* Recorder control stub. */
 
-char* illuminati_skills = "ilmskills";
-char* illuminati_routine = "ilmroutine";
-char* slot1 = "slot1";
-char* slot2 = "slot2";
-char* slot3 = "slot3";
-
-char* selectAutonomous() {
+int selectAutonomous() {
 	int pos = sensorValue[autoSelector];
 
 	if(pos < 727) {					// Illuminati Skills
-		return illuminati_skills;
+		return 0;
 	} else if(pos < 1920) {	// Illuminati routine
-		return illuminati_routine;
+		return 1;
 	} else if(pos < 2678) {	// Off
-		return NULL;
+		return 2;
 	} else if(pos < 3200) {	// A1
-		return slot1;
+		return 3;
 	} else if(pos < 3768) { // A2
-		return slot2;
+		return 4;
 	} else if(pos < 4080) {	// A3
-		return slot3;
+		return 5;
 	}
 
-	return NULL;
+	return -1;
+}
+
+void loadAutonomous(replayData* replay) {
+	int auto = selectAutonomous();
+
+	writeDebugStreamLine("%d", auto);
+
+	switch(auto) {
+		case 0:
+			writeDebugStreamLine("Loading: ilmskills");
+			loadReplayFromFile("ilmskills", replay);
+			break;
+		case 1:
+			writeDebugStreamLine("Loading: ilmroutine");
+			loadReplayFromFile("ilmroutine", replay);
+			break;
+		case 3:
+			writeDebugStreamLine("Loading: slot1");
+			loadReplayFromFile("slot1", replay);
+			break;
+		case 4:
+			writeDebugStreamLine("Loading: slot2");
+			loadReplayFromFile("slot2", replay);
+			break;
+		case 5:
+			writeDebugStreamLine("Loading: slot3");
+			loadReplayFromFile("slot3", replay);
+			break;
+		case 2:
+		default:
+			break;
+	}
+
+	if(auto != 2) {
+		clearLCDLine(0);
+		displayLCDCenteredString(0, "Load done.");
+		writeDebugStreamLine("Loading done.");
+	}
+}
+
+void saveAutonomous(replayData* replay) {
+	int auto = selectAutonomous();
+
+	writeDebugStreamLine("Saving: %d", auto);
+
+	switch(auto) {
+		case 0:
+			writeDebugStreamLine("Saving: ilmskills");
+			saveReplayToFile("ilmskills", replay);
+			break;
+		case 1:
+			writeDebugStreamLine("Saving: ilmroutine");
+			saveReplayToFile("ilmroutine", replay);
+			break;
+		case 3:
+			writeDebugStreamLine("Saving: slot1");
+			saveReplayToFile("slot1", replay);
+			break;
+		case 4:
+			writeDebugStreamLine("Saving: slot2");
+			saveReplayToFile("slot2", replay);
+			break;
+		case 5:
+			writeDebugStreamLine("Saving: slot3");
+			saveReplayToFile("slot3", replay);
+			break;
+		case 2:
+		default:
+			writeDebugStreamLine("Not saving.");
+			break;
+	}
+
+	if(auto != 2) {
+		clearLCDLine(0);
+		displayLCDCenteredString(0, "Save done.");
+		writeDebugStreamLine("Saving done.");
+	}
 }
 
 void pre_auton() {
 }
 
 task autonomous() {
-	char* filename = selectAutonomous();
-
 	clearReplay();
 
-	if(filename != NULL) {
-		writeDebugStreamLine(filename);
-		loadReplayFromFile(filename, &replay);
-	}
+	loadAutonomous(&replay);
 
 	replay.streamIndex = 0;
 	initState();
@@ -117,6 +183,10 @@ task usercontrol()
 		sleep(5);
 	}
 
+	clearLCDLine(0);
+	clearLCDLine(1);
+	displayLCDCenteredString(0, "Recording...");
+
 	while (true)
 	{
 		controllerToControlState();
@@ -141,7 +211,7 @@ task usercontrol()
 
 	replay.streamSize = replay.streamIndex+1;
 
-	stopAllMotors();
+	stopAllMotorsCustom();
 
 	bool doSave = false;
 	while(true) {
@@ -161,12 +231,7 @@ task usercontrol()
 		}
 	}
 
-	char* filename = selectAutonomous();
-
-	if(doSave && (filename != NULL)) {
-		writeDebugStream(filename);
-		saveReplayToFile(filename, &replay);
-		clearLCDLine(0);
-		displayLCDCenteredString(0, "Save done.");
+	if(doSave) {
+		saveAutonomous(&replay);
 	}
 }
