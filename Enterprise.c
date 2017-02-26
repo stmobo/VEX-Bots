@@ -1,5 +1,5 @@
 #define MAX_FLASH_FILE_SIZE 10810
-#include "./rcfs-master/FlashLib.h"
+#include "./rcfs/FlashLib.h"
 
 const float snapshotFreq = 30; // Hz
 const float deltaT = (1/snapshotFreq) * 1000; // time between snapshots in milliseconds
