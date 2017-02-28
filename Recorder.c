@@ -32,101 +32,58 @@
 #include "./RedCastle.c"
 /* Recorder control stub. */
 
-int selectAutonomous() {
+void loadAutonomous(replayData* replay) {
 	int pos = sensorValue[autoSelector];
 
-	if(pos < 727) {					// Illuminati Skills
-		return 0;
+	if(pos < 727) {		// Illuminati Skills
+		writeDebugStreamLine("Loading: ilmskills");
+		loadReplayFromFile("ilmskills", replay);
 	} else if(pos < 1920) {	// Illuminati routine
-		return 1;
+		writeDebugStreamLine("Loading: ilmroutine");
+		loadReplayFromFile("ilmroutine", replay);
 	} else if(pos < 2678) {	// Off
-		return 2;
+		return;
 	} else if(pos < 3200) {	// A1
-		return 3;
+		writeDebugStreamLine("Loading: slot1");
+		loadReplayFromFile("slot1", replay);
 	} else if(pos < 3768) { // A2
-		return 4;
+		writeDebugStreamLine("Loading: slot2");
+		loadReplayFromFile("slot2", replay);
 	} else if(pos < 4080) {	// A3
-		return 5;
+		writeDebugStreamLine("Loading: slot3");
+		loadReplayFromFile("slot3", replay);
 	}
-
-	return -1;
-}
-
-void loadAutonomous(replayData* replay) {
-	int auto = selectAutonomous();
-
-	writeDebugStreamLine("%d", auto);
-
-	switch(auto) {
-		case 0:
-			writeDebugStreamLine("Loading: ilmskills");
-			loadReplayFromFile("ilmskills", replay);
-			break;
-		case 1:
-			writeDebugStreamLine("Loading: ilmroutine");
-			loadReplayFromFile("ilmroutine", replay);
-			break;
-		case 3:
-			writeDebugStreamLine("Loading: slot1");
-			loadReplayFromFile("slot1", replay);
-			break;
-		case 4:
-			writeDebugStreamLine("Loading: slot2");
-			loadReplayFromFile("slot2", replay);
-			break;
-		case 5:
-			writeDebugStreamLine("Loading: slot3");
-			loadReplayFromFile("slot3", replay);
-			break;
-		case 2:
-		default:
-			break;
-	}
-
-	if(auto != 2) {
-		clearLCDLine(0);
-		displayLCDCenteredString(0, "Load done.");
-		writeDebugStreamLine("Loading done.");
-	}
+	
+	clearLCDLine(0);
+	displayLCDCenteredString(0, "Load done.");
+	writeDebugStreamLine("Loading done.");
 }
 
 void saveAutonomous(replayData* replay) {
-	int auto = selectAutonomous();
+	int pos = sensorValue[autoSelector];
 
-	writeDebugStreamLine("Saving: %d", auto);
-
-	switch(auto) {
-		case 0:
-			writeDebugStreamLine("Saving: ilmskills");
-			saveReplayToFile("ilmskills", replay);
-			break;
-		case 1:
-			writeDebugStreamLine("Saving: ilmroutine");
-			saveReplayToFile("ilmroutine", replay);
-			break;
-		case 3:
-			writeDebugStreamLine("Saving: slot1");
-			saveReplayToFile("slot1", replay);
-			break;
-		case 4:
-			writeDebugStreamLine("Saving: slot2");
-			saveReplayToFile("slot2", replay);
-			break;
-		case 5:
-			writeDebugStreamLine("Saving: slot3");
-			saveReplayToFile("slot3", replay);
-			break;
-		case 2:
-		default:
-			writeDebugStreamLine("Not saving.");
-			break;
+	if(pos < 727) {		// Illuminati Skills
+		writeDebugStreamLine("Saving: ilmskills");
+		saveReplayToFile("ilmskills", replay);
+	} else if(pos < 1920) {	// Illuminati routine
+		writeDebugStreamLine("Saving: ilmroutine");
+		saveReplayToFile("ilmroutine", replay);
+	} else if(pos < 2678) {	// Off
+		return;
+	} else if(pos < 3200) {	// A1
+		writeDebugStreamLine("Saving: slot1");
+		saveReplayToFile("slot1", replay);
+	} else if(pos < 3768) { // A2
+		writeDebugStreamLine("Saving: slot2");
+		saveReplayToFile("slot2", replay);
+	} else if(pos < 4080) {	// A3
+		writeDebugStreamLine("Saving: slot3");
+		saveReplayToFile("slot3", replay);
 	}
 
-	if(auto != 2) {
-		clearLCDLine(0);
-		displayLCDCenteredString(0, "Save done.");
-		writeDebugStreamLine("Saving done.");
-	}
+	clearLCDLine(0);
+	displayLCDCenteredString(0, "Save done.");
+	writeDebugStreamLine("Saving done.");
 }
 
 void pre_auton() {
