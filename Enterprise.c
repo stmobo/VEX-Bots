@@ -12,7 +12,7 @@ struct replayData {
 };
 
 void initReplayData(replayData* data) {
-	data->streamIndex = 0;
+	data->streamIndex = 2;
 	data->streamSize = 0;
 	data->loaded = false;
 }
@@ -29,18 +29,27 @@ void writeByte(replayData* data, unsigned char dat) {
 }
 
 void findFile(char* name, flash_file* out) {
-	flash_file* cur = out;
+	flash_file cur;
 
-	if(RCFS_FindFirstFile(cur) < 0)
+    RCFS_FileInit(&cur);
+    RCFS_FileInit(out);
+
+	if(RCFS_FindFirstFile(&cur) < 0)
 		return;
 
-	do {
-		if( strcmp(name, &(cur->name[0])) == 0 ) {
-			return;
-		}
-	} while(RCFS_FindNextFile(cur) >= 0);
+#ifdef DEBUG
+    int i = 0;
+#endif
 
-	RCFS_FileInit(cur);
+	do {
+		if( strcmp(name, (char*)cur.name) == 0 ) {
+			*out = cur;
+#ifdef DEBUG
+            i++;
+            writeDebugStreamLine("Found iteration %d of file %s.", i, name);
+#endif
+		}
+	} while(RCFS_FindNextFile(&cur) >= 0);
 }
 
 /*
@@ -50,66 +59,34 @@ void findFile(char* name, flash_file* out) {
  */
 
 void saveReplayToFile(char* name, replayData* repSt) {
-	// discarded parameters to RCFS_GetFile
-	unsigned char* tmp1;
-	int tmp2;
-
 #ifdef DEBUG
 	writeDebugStreamLine("Killed motors, now finding file:");
 	writeDebugStreamLine(name);
 #endif
 
-	repSt->streamSize = repSt->streamIndex+1;
+	repSt->streamSize = repSt->streamIndex;
+    repSt->streamData[0] = (repSt->streamSize & 0xFF);
+    repSt->streamData[1] = ((repSt->streamSize & 0xFF00) >> 8) & 0xFF;
 
-	flash_file fHandle;
-	findFile(name, &fHandle);
-	if(fHandle.addr == NULL) {
+    clearLCDLine(0);
+    clearLCDLine(1);
+    displayLCDCenteredString(0, "! WRITING !");
+
 #ifdef DEBUG
-		writeDebugStreamLine("File not found, adding to FS.");
+    writeDebugStreamLine("BEGINNING WRITE!");
 #endif
 
-		repSt->streamData[0] = (repSt->streamSize & 0xFF);
-		repSt->streamData[1] = ((repSt->streamSize & 0xFF00) >> 8) & 0xFF;
-
-		clearLCDLine(0);
-		clearLCDLine(1);
-		displayLCDCenteredString(0, "! WRITING !");
+    signed int err = 0;
+    if((err = RCFS_AddFile((unsigned char*)repSt->streamData, repSt->streamSize, name)) < 0) {
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Write failed!");
 #ifdef DEBUG
-		writeDebugStreamLine("BEGINNING WRITE!");
+        writeDebugStreamLine("Write failed, code: %d", err);
 #endif
-		signed int err = 0;
-		if((err = RCFS_AddFile((unsigned char*)repSt->streamData, 10802, name)) < 0) {
-			clearLCDLine(0);
-			displayLCDCenteredString(0, "Write failed!");
-#ifdef DEBUG
-			writeDebugStreamLine("Write failed, code: %d", err);
-#endif
-		}
-	} else {
-#ifdef DEBUG
-		writeDebugStreamLine("Found existing file.");
-#endif
-		fHandle.data[0] = (repSt->streamSize & 0xFF);
-		fHandle.data[1] = ((repSt->streamSize & 0xFF00) >> 8) & 0xFF;
+    }
 
-		for(unsigned int i=2;i<repSt->streamSize;i++) {
-			fHandle.data[i] = repSt->streamData[i];
-		}
-
-		clearLCDLine(0);
-		clearLCDLine(1);
-		displayLCDCenteredString(0, "! WRITING !");
 #ifdef DEBUG
-		writeDebugStreamLine("BEGINNING WRITE!");
-#endif
-		RCFS_Write(&fHandle);
-
-		clearLCDLine(0);
-		clearLCDLine(1);
-		displayLCDCenteredString(0, "Write complete.");
-	}
-#ifdef DEBUG
-	writeDebugStreamLine("Write complete.");
+   writeDebugStreamLine("Write complete.");
 #endif
 }
 

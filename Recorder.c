@@ -191,4 +191,6 @@ task usercontrol()
 	if(doSave) {
 		saveAutonomous(&replay);
 	}
+
+    RCFS_ReadVTOC();
 }

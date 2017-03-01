@@ -26,8 +26,36 @@
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 
+#include "./Enterprise.c"
 #include "./RedCastle.c"
 /* Competition control stub. */
+
+void loadAutonomous(replayData* replay) {
+	int pos = sensorValue[autoSelector];
+
+	if(pos < 727) {		// Illuminati Skills
+		writeDebugStreamLine("Loading: ilmskills");
+		loadReplayFromFile("ilmskills", replay);
+	} else if(pos < 1920) {	// Illuminati routine
+		writeDebugStreamLine("Loading: ilmroutine");
+		loadReplayFromFile("ilmroutine", replay);
+	} else if(pos < 2678) {	// Off
+		return;
+	} else if(pos < 3200) {	// A1
+		writeDebugStreamLine("Loading: slot1");
+		loadReplayFromFile("slot1", replay);
+	} else if(pos < 3768) { // A2
+		writeDebugStreamLine("Loading: slot2");
+		loadReplayFromFile("slot2", replay);
+	} else if(pos > 4080) {	// A3
+		writeDebugStreamLine("Loading: slot3");
+		loadReplayFromFile("slot3", replay);
+	}
+
+	clearLCDLine(0);
+	displayLCDCenteredString(0, "Load done.");
+	writeDebugStreamLine("Loading done.");
+}
 
 void pre_auton()
 {
@@ -35,20 +63,23 @@ void pre_auton()
 }
 
 task autonomous() {
+    clearReplay();
+    loadAutonomous(&replay);
+
 	initState();
 	while(replay.streamIndex < replay.streamSize) {
 		replayToControlState();
 		controlLoopIteration();
 		sleep((int)deltaT);
 	}
-	
+
 	stopAllMotors();
 }
 
 task usercontrol()
 {
 	resetState();
-	
+
 	while (true)
 	{
 		controllerToControlState();
