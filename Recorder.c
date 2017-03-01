@@ -49,11 +49,11 @@ void loadAutonomous(replayData* replay) {
 	} else if(pos < 3768) { // A2
 		writeDebugStreamLine("Loading: slot2");
 		loadReplayFromFile("slot2", replay);
-	} else if(pos < 4080) {	// A3
+	} else if(pos > 4080) {	// A3
 		writeDebugStreamLine("Loading: slot3");
 		loadReplayFromFile("slot3", replay);
 	}
-	
+
 	clearLCDLine(0);
 	displayLCDCenteredString(0, "Load done.");
 	writeDebugStreamLine("Loading done.");
@@ -76,7 +76,7 @@ void saveAutonomous(replayData* replay) {
 	} else if(pos < 3768) { // A2
 		writeDebugStreamLine("Saving: slot2");
 		saveReplayToFile("slot2", replay);
-	} else if(pos < 4080) {	// A3
+	} else if(pos > 4080) {	// A3
 		writeDebugStreamLine("Saving: slot3");
 		saveReplayToFile("slot3", replay);
 	}
