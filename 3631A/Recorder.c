@@ -29,7 +29,7 @@
 #define DEBUG
 
 #include "../Enterprise.c"
-#include "./RedCastle.c"
+#include "./Akagi.c"
 /* Recorder control stub. */
 
 void loadAutonomous(replay_t* replay) {

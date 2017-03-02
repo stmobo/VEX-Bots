@@ -27,7 +27,7 @@
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 
 #include "./Enterprise.c"
-#include "./RedCastle.c"
+#include "./Akagi.c"
 /* Competition control stub. */
 
 void loadAutonomous(replayData* replay) {
