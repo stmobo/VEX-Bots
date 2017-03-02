@@ -1,3 +1,6 @@
+#ifndef ENTERPRISE_C
+#define ENTERPRISE_C
+
 #define MAX_FLASH_FILE_SIZE 10810
 #include "./rcfs/FlashLib.h"
 
@@ -118,7 +121,9 @@ void loadReplayFromFile(const char* name, replay_t* repSt) {
 #ifdef DEBUG
 		writeDebugStreamLine("Loaded %i bytes.", streamSz);
 #endif
-	repSt->loaded = true;
+
+        repSt->streamIndex = 2; // stream filesize = 2 bytes at positions 0-1
+        repSt->loaded = true;
 	} else {
 		clearLCDLine(0);
 		displayLCDCenteredString(0, "File not found!");
@@ -127,3 +132,5 @@ void loadReplayFromFile(const char* name, replay_t* repSt) {
 #endif
 	}
 }
+
+#endif /* end of include guard: ENTERPRISE_C */

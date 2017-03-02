@@ -90,16 +90,16 @@ void pre_auton() {
 }
 
 task autonomous() {
-	clearReplay();
+    control_t state;
+    replay_t replay;
 
+	initReplayData(&replay);
+    initState(&replay);
 	loadAutonomous(&replay);
 
-	replay.streamIndex = 0;
-	initState();
-
 	while(replay.streamIndex < replay.streamSize) {
-		replayToControlState();
-		controlLoopIteration();
+		replayToControlState(&replay);
+		controlLoopIteration(&state);
 		sleep((int)deltaT);
 	}
 
@@ -117,8 +117,10 @@ unsigned int timelimit = 61000;
 
 task usercontrol()
 {
-	initState();
-	clearReplay();
+    control_t state;
+    replay_t replay;
+
+	initState(&state);
 
 	clearLCDLine(0);
 	clearLCDLine(1);
@@ -127,13 +129,14 @@ task usercontrol()
 
 	while (true)
 	{
-		if(abs(vexRT[Ch2]) > deadband || abs(vexRT[Ch1]) > deadband) {
-			break;
-		}
-
-		if(vexRT[Btn6D] || vexRT[Btn6U] || vexRT[Btn7U] ||
-		   vexRT[Btn5U] || vexRT[Btn5D] || vexRT[Btn8U] || vexRT[Btn8D])
-		{
+        controllerToControlState(&state);
+		if(
+            abs(state.yAxis) > deadband ||
+            abs(state.zAxis) > deadband ||
+            state.catUp || state.catDown || state.catReset || state.hangUp ||
+            state.hangDown || state.turnLeft || state.turnRight ||
+            state.slowDown
+        )
 			break;
 		}
 
@@ -144,20 +147,24 @@ task usercontrol()
 	clearLCDLine(1);
 	displayLCDCenteredString(0, "Recording...");
 
+    resetState(&state);
+
 	while (true)
 	{
-		controllerToControlState();
-		controlLoopIteration();
+		controllerToControlState(&state);
+		controlLoopIteration(&state);
 
 		if(timelimit > 0) {
-			controlStateToReplay();
+			controlStateToReplay(&state, &replay);
 		}
 
 		currentTime += (int)deltaT;
 
+        /*
 		if(vexRT[Btn7L]) {
 			break;
 		}
+        */
 
 		if((currentTime > timelimit) && (timelimit > 0)) {
 			break;

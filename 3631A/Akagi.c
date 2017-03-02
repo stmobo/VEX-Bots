@@ -1,20 +1,23 @@
 /* NOTE: old auto code is in autodrive.c */
 
+#ifndef AKAGI_C
+#define AKAGI_C
+
 /* Control parameter constants. */
 const int deadband = 25;
-int manualTurnOut = 32;
-int absoluteMaxDrive = 96;
-int maxMotorOut = 63;
-int turnMotorOut = 32;
+const int manualTurnOut = 32;
 
-bool limSwitchEnabled = true;
-bool catStateEnabled = true;
+int fastSpeedLimit = 96;
+int slowSpeedLimit = 48; // = 0.5 * fastSpeedLimit
 
-struct controlState {
+const bool limSwitchEnabled = true;
+const bool catStateEnabled = true;
+
+struct control_t {
 	signed char yAxis;	/* Raw Ch2 from stick */
 	signed char zAxis;	/* Raw Ch1 from stick */
 
-	bool catUp;		/* Button 6D */
+	bool catUp;	       	/* Button 6D */
 	bool catDown;		/* Button 6U */
 	bool catReset;		/* Button 7U */
 
@@ -23,40 +26,34 @@ struct controlState {
 
 	bool turnRight;		/* Button 8U */
 	bool turnLeft;		/* Button 8D */
+    bool slowDown;      /* Button 7L (tentative) */
 
 	unsigned int catState;
+    unsigned int speedLimit;
 };
-controlState currentState;
-replayData replay;
 
 /* Reset state (for when switching from auto->driver) */
-void resetState() {
-	currentState.yAxis = 0;
-	currentState.zAxis = 0;
+void resetState(control_t* state) {
+	state->yAxis = 0;
+	state->zAxis = 0;
 
-	currentState.catUp = false;
-	currentState.catDown = false;
-	currentState.catReset = false;
-	currentState.hangUp = false;
-	currentState.hangDown = false;
-	currentState.turnLeft = false;
-	currentState.turnRight = false;
+	state->catUp = false;
+	state->catDown = false;
+	state->catReset = false;
+	state->hangUp = false;
+	state->hangDown = false;
+	state->turnLeft = false;
+	state->turnRight = false;
+    state->slowDown = false;
+
+    state->speedLimit = fastSpeedLimit;
 }
 
 /* Completely initialize state (from preauto->auto) */
-void initState() {
-	resetState();
-	currentState.catState = 0;
-
-}
-
-void clearReplay() {
-	for(unsigned int i=0;i<10802;i++) {
-		replay.streamData[i] = 0;
-	}
-
-	replay.streamIndex = 0;
-	replay.streamSize = 0;
+void initState(control_t* state) {
+	resetState(state);
+	state->catState = 0;
+    state->speedLimit = fastSpeedLimit;
 }
 
 void catapultDown() {
@@ -92,8 +89,8 @@ void stopAllMotorsCustom() {
 	motor[hangMotor] = 0;
 }
 
-void intakeReset() {
-		if (currentState.catReset && !SensorValue[catapultLim])
+void intakeReset(control_t* state) {
+		if (state->catReset && !SensorValue[catapultLim])
 		{
 			motor[rightLowerIntake] = 127;
 			motor[leftLowerIntake] = 127;
@@ -114,13 +111,13 @@ void fireRoutine() {
 	}
 }
 
-void fireControl() {
+void fireControl(control_t* state) {
 	if(!limSwitchEnabled || !catStateEnabled) {
-		if(currentState.catDown && !currentState.catUp) {
+		if(state->catDown && !state->catUp) {
 			catapultDown();
-		} else if(!currentState.catDown && currentState.catUp) {
+		} else if(!state->catDown && state->catUp) {
 			catapultUp();
-		} else if(!currentState.catDown && !currentState.catUp) {
+		} else if(!state->catDown && !state->catUp) {
 			catapultStop();
 		}
 	} else {
@@ -131,10 +128,10 @@ void fireControl() {
 		 * state 1 -> catapult halted at switch
 		 * state 2 -> catapult ready to fire
 		 */
-		if(currentState.catState == 0) {
-			if(currentState.catDown) {
+		if(state->catState == 0) {
+			if(state->catDown) {
 				catapultDown();
-			} else if(currentState.catUp) {
+			} else if(state->catUp) {
 				catapultUp();
 			} else {
 				catapultStop();
@@ -142,79 +139,100 @@ void fireControl() {
 
 			if(sensorValue[catapultLim] == 1) {
 				catapultStop();
-				currentState.catState = 1;
+				state->catState = 1;
 				clearTimer(T3);
 			}
-		} else if(currentState.catState == 1) {
-			if(!currentState.catDown) {
+		} else if(state->catState == 1) {
+			if(!state->catDown) {
 				if(time1[T3] > 150) {
-					currentState.catState = 2;
+					state->catState = 2;
 				}
-			} else if(currentState.catUp) {
+			} else if(state->catUp) {
 				catapultUp();
 			} else {
 				catapultStop();
 			}
 
 			if(sensorValue[catapultLim] == 0) {
-				currentState.catState = 0;
+				state->catState = 0;
 			}
-		} else if(currentState.catState == 2) {
-			if(currentState.catDown) {
+		} else if(state->catState == 2) {
+			if(state->catDown) {
 				fireRoutine();
-			} else if(currentState.catUp) {
+			} else if(state->catUp) {
 				catapultUp();
 			} else {
 				catapultStop();
 			}
 
 			if(sensorValue[catapultLim] == 0) {
-				currentState.catState = 0;
+				state->catState = 0;
 			}
 		}
 	}
 }
 
-void hangControl() {
-	if( currentState.hangUp && !currentState.hangDown ) {
+void hangControl(control_t* state) {
+	if( state->hangUp && !state->hangDown ) {
 		motor[hangMotor] = 127;
-	} else if( currentState.hangDown && !currentState.hangUp ) {
+	} else if( state->hangDown && !state->hangUp ) {
 		motor[hangMotor] = -127;
-	} else if( !currentState.hangDown && !currentState.hangUp ) {
+	} else if( !state->hangDown && !state->hangUp ) {
 		motor[hangMotor] = 0;
 	}
 }
 
-void moveControl() {
-	if( currentState.turnLeft || currentState.turnRight ) {
+void moveControl(control_t* state) {
+	if( state->turnLeft || state->turnRight ) {
 		/* Rotation inputs: */
-		motor[LBack] = motor[LFront] = (currentState.turnLeft ? -1*manualTurnOut : manualTurnOut);
-		motor[RBack] = motor[RFront] = (currentState.turnLeft ? manualTurnOut : -1*manualTurnOut);
+		motor[LBack] = motor[LFront] = (state->turnLeft ? -1*manualTurnOut : manualTurnOut);
+		motor[RBack] = motor[RFront] = (state->turnLeft ? manualTurnOut : -1*manualTurnOut);
 	} else {
-		short yAxis = (abs(currentState.yAxis) < deadband) ? 0 : -currentState.yAxis;
-		short zAxis = (abs(currentState.zAxis) < deadband) ? 0 : -currentState.zAxis;
+        /* Set speedlimit as appropriate: */
+        if(state->slowDown) {
+            state->speedLimit = slowSpeedLimit;
+        } else {
+            state->speedLimit = fastSpeedLimit;
+        }
+
+		short yAxis = (abs(state->yAxis) < deadband) ? 0 : -state->yAxis;
+		short zAxis = (abs(state->zAxis) < deadband) ? 0 : -state->zAxis;
 
 		short right = yAxis - zAxis;
 		short left = yAxis + zAxis;
 
-		right = (abs(right) > absoluteMaxDrive) ? (sgn(right)*absoluteMaxDrive) : right;
-		left = (abs(left) > absoluteMaxDrive) ? (sgn(left)*absoluteMaxDrive) : left;
+		right = (abs(right) > state->speedLimit) ? (sgn(right)*state->speedLimit) : right;
+		left = (abs(left) > state->speedLimit) ? (sgn(left)*state->speedLimit) : left;
 
 		motor[RFront] = motor[RBack] = right;
 		motor[LFront] = motor[LBack] = left;
 	}
 }
 
-void controlLoopIteration() {
-	//intakeReset();
-	//fireControl();
-	//hangControl();
-	moveControl();
+void controlLoopIteration(control_t* state) {
+	intakeReset(state);
+	fireControl(state);
+	hangControl(state);
+	moveControl(state);
 }
 
-void replayToControlState() {
-	currentState.yAxis = (signed char)readNextByte(&replay);
-	currentState.zAxis = (signed char)readNextByte(&replay);
+void controllerToControlState(control_t* state) {
+	state->yAxis = vexRT[Ch2];
+	state->zAxis = vexRT[Ch1];
+
+	state->catUp = (vexRT[Btn6D] > 0);
+	state->catDown = (vexRT[Btn6U] > 0);
+	state->catReset = (vexRT[Btn7U] > 0);
+	state->hangUp = (vexRT[Btn5U] > 0);
+	state->hangDown = (vexRT[Btn5D] > 0);
+	state->turnRight = (vexRT[Btn8U] > 0);
+	state->turnLeft = (vexRT[Btn8D] > 0);
+    state->slowDown = (vexRT[Btn7L] > 0);
+}
+
+void replayToControlState(control_t* state, replay_t* replay) {
+	state->yAxis = (signed char)readNextByte(replay);
+	state->zAxis = (signed char)readNextByte(replay);
 
 	/* Bit | Button
 	 *  0  | Catapult Up (6D)
@@ -224,44 +242,35 @@ void replayToControlState() {
 	 *  4  | Hang Down (5D)
 	 *  5  | Turn Right (8U)
 	 *  6  | Turn Left (8D)
-	 *  7  | <reserved>
+	 *  7  | Slow Down (7L)
 	 */
-	unsigned char buttonState = readNextByte(&replay);
+	unsigned char buttonState = readNextByte(replay);
 
-	currentState.catUp = TEST_BIT(buttonState, 0);
-	currentState.catDown = TEST_BIT(buttonState, 1);
-	currentState.catReset = TEST_BIT(buttonState, 2);
-	currentState.hangUp = TEST_BIT(buttonState, 3);
-	currentState.hangDown = TEST_BIT(buttonState, 4);
-	currentState.turnRight = TEST_BIT(buttonState, 5);
-	currentState.turnLeft = TEST_BIT(buttonState, 6);
+	state->catUp = TEST_BIT(buttonState, 0);
+	state->catDown = TEST_BIT(buttonState, 1);
+	state->catReset = TEST_BIT(buttonState, 2);
+	state->hangUp = TEST_BIT(buttonState, 3);
+	state->hangDown = TEST_BIT(buttonState, 4);
+	state->turnRight = TEST_BIT(buttonState, 5);
+	state->turnLeft = TEST_BIT(buttonState, 6);
+	state->slowDown = TEST_BIT(buttonState, 7);
 }
 
-void controllerToControlState() {
-	currentState.yAxis = vexRT[Ch2];
-	currentState.zAxis = vexRT[Ch1];
-
-	currentState.catUp = (vexRT[Btn6D] > 0);
-	currentState.catDown = (vexRT[Btn6U] > 0);
-	currentState.catReset = (vexRT[Btn7U] > 0);
-	currentState.hangUp = (vexRT[Btn5U] > 0);
-	currentState.hangDown = (vexRT[Btn5D] > 0);
-	currentState.turnRight = (vexRT[Btn8U] > 0);
-	currentState.turnLeft = (vexRT[Btn8D] > 0);
-}
-
-void controlStateToReplay() {
-	writeByte(&replay, (unsigned char)currentState.yAxis);
-	writeByte(&replay, (unsigned char)currentState.zAxis);
+void controlStateToReplay(control_t* state, replay_t* replay) {
+	writeByte(replay, (unsigned char)state->yAxis);
+	writeByte(replay, (unsigned char)state->zAxis);
 
 	unsigned char buttonState = 0;
-	buttonState |= (currentState.catUp ? 1 : 0);
-	buttonState |= (currentState.catDown ? 1 : 0) << 1;
-	buttonState |= (currentState.catReset ? 1 : 0) << 2;
-	buttonState |= (currentState.hangUp ? 1 : 0) << 3;
-	buttonState |= (currentState.hangDown ? 1 : 0) << 4;
-	buttonState |= (currentState.turnRight ? 1 : 0) << 5;
-	buttonState |= (currentState.turnLeft ? 1 : 0) << 6;
+	buttonState |= (state->catUp ? 1 : 0);
+	buttonState |= (state->catDown ? 1 : 0) << 1;
+	buttonState |= (state->catReset ? 1 : 0) << 2;
+	buttonState |= (state->hangUp ? 1 : 0) << 3;
+	buttonState |= (state->hangDown ? 1 : 0) << 4;
+	buttonState |= (state->turnRight ? 1 : 0) << 5;
+	buttonState |= (state->turnLeft ? 1 : 0) << 6;
+	buttonState |= (state->slowDown ? 1 : 0) << 7;
 
-	writeByte(&replay, buttonState);
+	writeByte(replay, buttonState);
 }
+
+#endif /* end of include guard: AKAGI_C */
