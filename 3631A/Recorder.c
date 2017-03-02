@@ -32,6 +32,8 @@
 #include "./Akagi.c"
 /* Recorder control stub. */
 
+replay_t loadedReplay;
+
 void loadAutonomous(replay_t* replay) {
 	int pos = sensorValue[autoSelector];
 
@@ -90,15 +92,14 @@ void pre_auton() {
 }
 
 task autonomous() {
-    control_t state;
-    replay_t replay;
+  control_t state;
 
-	initReplayData(&replay);
-    initState(&replay);
-	loadAutonomous(&replay);
+	initReplayData(&loadedReplay);
+  initState(&state);
+	loadAutonomous(&loadedReplay);
 
-	while(replay.streamIndex < replay.streamSize) {
-		replayToControlState(&replay);
+	while(loadedReplay.streamIndex < loadedReplay.streamSize) {
+		replayToControlState(&state, &loadedReplay);
 		controlLoopIteration(&state);
 		sleep((int)deltaT);
 	}
@@ -117,10 +118,10 @@ unsigned int timelimit = 61000;
 
 task usercontrol()
 {
-    control_t state;
-    replay_t replay;
+  control_t state;
 
 	initState(&state);
+	initReplayData(&loadedReplay);
 
 	clearLCDLine(0);
 	clearLCDLine(1);
@@ -136,7 +137,7 @@ task usercontrol()
             state.catUp || state.catDown || state.catReset || state.hangUp ||
             state.hangDown || state.turnLeft || state.turnRight ||
             state.slowDown
-        )
+       ) {
 			break;
 		}
 
@@ -155,16 +156,16 @@ task usercontrol()
 		controlLoopIteration(&state);
 
 		if(timelimit > 0) {
-			controlStateToReplay(&state, &replay);
+			controlStateToReplay(&state, &loadedReplay);
 		}
 
 		currentTime += (int)deltaT;
 
-        /*
-		if(vexRT[Btn7L]) {
+
+		if(vexRT[Btn7R]) {
 			break;
 		}
-        */
+
 
 		if((currentTime > timelimit) && (timelimit > 0)) {
 			break;
@@ -173,7 +174,7 @@ task usercontrol()
 		sleep((int)deltaT);
 	}
 
-	replay.streamSize = replay.streamIndex+1;
+	loadedReplay.streamSize = loadedReplay.streamIndex+1;
 
 	stopAllMotorsCustom();
 
@@ -196,7 +197,7 @@ task usercontrol()
 	}
 
 	if(doSave) {
-		saveAutonomous(&replay);
+		saveAutonomous(&loadedReplay);
 	}
 
     RCFS_ReadVTOC();

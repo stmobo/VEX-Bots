@@ -23,24 +23,18 @@ void initReplayData(replay_t* data) {
 }
 
 unsigned char readNextByte(replay_t* data) {
-    if(data->streamIndex >= data->streamSize)
-        return 0;
-
 	unsigned char ret = data->streamData[data->streamIndex];
 	data->streamIndex += 1;
 	return ret;
 }
 
 void writeByte(replay_t* data, unsigned char dat) {
-    if(data->streamIndex > 10802)
-        return;
-
 	data->streamData[data->streamIndex] = dat;
 	data->streamIndex += 1;
 }
 
 void findFile(char* name, flash_file* out) {
-	flash_file cur;
+		flash_file cur;
 
     RCFS_FileInit(&cur);
     RCFS_FileInit(out);
@@ -75,7 +69,7 @@ void saveReplayToFile(char* name, replay_t* repSt) {
 	writeDebugStreamLine(name);
 #endif
 
-	repSt->streamSize = repSt->streamIndex;
+	  repSt->streamSize = repSt->streamIndex;
     repSt->streamData[0] = (repSt->streamSize & 0xFF);
     repSt->streamData[1] = ((repSt->streamSize & 0xFF00) >> 8) & 0xFF;
 
@@ -124,12 +118,13 @@ void loadReplayFromFile(const char* name, replay_t* repSt) {
 			repSt->streamData[i] = fHandle.data[i];
 		}
 		repSt->streamSize = streamSz;
+
 #ifdef DEBUG
 		writeDebugStreamLine("Loaded %i bytes.", streamSz);
 #endif
 
-        repSt->streamIndex = 2; // stream filesize = 2 bytes at positions 0-1
-        repSt->loaded = true;
+    repSt->streamIndex = 2; // stream filesize = 2 bytes at positions 0-1
+    repSt->loaded = true;
 	} else {
 		clearLCDLine(0);
 		displayLCDCenteredString(0, "File not found!");

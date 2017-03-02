@@ -16,23 +16,23 @@ struct control_t {
 };
 
 void controlToMotors(const control_t state) {
-    motor[left] = state->left;
-    motor[right] = state->right;
+    motor[leftMotor] = state.left;
+    motor[rightMotor] = state.right;
 
-    if(state->open) {
-        motor[claw] = 127;
-    } else if(state->close) {
-        motor[claw] = -127;
+    if(state.open) {
+        motor[clawMotor] = 127;
+    } else if(state.close) {
+        motor[clawMotor] = -127;
     } else {
-        motor[claw] = 0;
+        motor[clawMotor] = 0;
     }
 
-    if(state->up) {
-        motor[arm] = 127;
-    } else if(state->down) {
-        motor[arm] = -127;
+    if(state.up) {
+        motor[armMotor] = 127;
+    } else if(state.down) {
+        motor[armMotor] = -127;
     } else {
-        motor[arm] = 0;
+        motor[armMotor] = 0;
     }
 }
 
@@ -52,6 +52,9 @@ void replayToControl(control_t* state, replay_t* replay) {
     state->right = (signed char)readNextByte(replay);
 
     unsigned char btnState = readNextByte(replay);
+
+    writeDebugStreamLine("%d / %d / %d", state->left, state->right, btnState);
+
     state->up = TEST_BIT(btnState, 0);
     state->down = TEST_BIT(btnState, 1);
     state->open = TEST_BIT(btnState, 2);

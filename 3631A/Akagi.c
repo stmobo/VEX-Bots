@@ -44,9 +44,9 @@ void resetState(control_t* state) {
 	state->hangDown = false;
 	state->turnLeft = false;
 	state->turnRight = false;
-    state->slowDown = false;
+  state->slowDown = false;
 
-    state->speedLimit = fastSpeedLimit;
+  state->speedLimit = fastSpeedLimit;
 }
 
 /* Completely initialize state (from preauto->auto) */
@@ -188,12 +188,14 @@ void moveControl(control_t* state) {
 		motor[LBack] = motor[LFront] = (state->turnLeft ? -1*manualTurnOut : manualTurnOut);
 		motor[RBack] = motor[RFront] = (state->turnLeft ? manualTurnOut : -1*manualTurnOut);
 	} else {
-        /* Set speedlimit as appropriate: */
-        if(state->slowDown) {
-            state->speedLimit = slowSpeedLimit;
-        } else {
-            state->speedLimit = fastSpeedLimit;
-        }
+    /* Set speedlimit as appropriate: */
+    float speedMult = 1.0;
+    if(state->slowDown) {
+        state->speedLimit = fastSpeedLimit;
+        speedMult = 0.5;
+    } else {
+        state->speedLimit = fastSpeedLimit;
+    }
 
 		short yAxis = (abs(state->yAxis) < deadband) ? 0 : -state->yAxis;
 		short zAxis = (abs(state->zAxis) < deadband) ? 0 : -state->zAxis;
@@ -204,8 +206,8 @@ void moveControl(control_t* state) {
 		right = (abs(right) > state->speedLimit) ? (sgn(right)*state->speedLimit) : right;
 		left = (abs(left) > state->speedLimit) ? (sgn(left)*state->speedLimit) : left;
 
-		motor[RFront] = motor[RBack] = right;
-		motor[LFront] = motor[LBack] = left;
+		motor[RFront] = motor[RBack] = (signed char)((float)right * speedMult);
+		motor[LFront] = motor[LBack] = (signed char)((float)left * speedMult);
 	}
 }
 
