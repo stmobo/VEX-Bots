@@ -26,9 +26,12 @@
 
 #include "Vex_Competition_Includes.c"   //Main competition background code...do not modify!
 
-#include "./Enterprise.c"
+#include "../Enterprise.c"
 #include "./Akagi.c"
 /* Competition control stub. */
+
+control_t state;
+replay_t replay;
 
 void loadAutonomous(replayData* replay) {
 	int pos = sensorValue[autoSelector];
@@ -63,27 +66,27 @@ void pre_auton()
 }
 
 task autonomous() {
-    clearReplay();
+    initReplayData(&replay);
     loadAutonomous(&replay);
 
-	initState();
+	initState(&state);
 	while(replay.streamIndex < replay.streamSize) {
-		replayToControlState();
-		controlLoopIteration();
+		replayToControlState(&state, &replay);
+		controlLoopIteration(&state);
 		sleep((int)deltaT);
 	}
 
-	stopAllMotors();
+	stopAllMotorsCustom();
 }
 
 task usercontrol()
 {
-	resetState();
+	resetState(&state);
 
 	while (true)
 	{
-		controllerToControlState();
-		controlLoopIteration();
+		controllerToControlState(&state);
+		controlLoopIteration(&state);
 		sleep((int)deltaT);
 	}
 }
