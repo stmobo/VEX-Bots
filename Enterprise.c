@@ -54,7 +54,7 @@ void findFile(char* name, flash_file* out) {
 
 	do {
 		if( strcmp(name, (char*)cur.name) == 0 ) {
-			*out = cur;
+			memcpy(out, &cur, sizeof(flash_file));
 #ifdef DEBUG
             i++;
             writeDebugStreamLine("Found iteration %d of file %s.", i, name);
