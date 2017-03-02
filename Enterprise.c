@@ -4,26 +4,26 @@
 const float snapshotFreq = 30; // Hz
 const float deltaT = (1/snapshotFreq) * 1000; // time between snapshots in milliseconds
 
-struct replayData {
+struct replay_t {
 	unsigned char streamData[10802];
 	unsigned int streamIndex;
 	unsigned int streamSize;
 	bool loaded;
 };
 
-void initReplayData(replayData* data) {
+void initReplayData(replay_t* data) {
 	data->streamIndex = 2;
 	data->streamSize = 0;
 	data->loaded = false;
 }
 
-unsigned char readNextByte(replayData* data) {
+unsigned char readNextByte(replay_t* data) {
 	unsigned char ret = data->streamData[data->streamIndex];
 	data->streamIndex += 1;
 	return ret;
 }
 
-void writeByte(replayData* data, unsigned char dat) {
+void writeByte(replay_t* data, unsigned char dat) {
 	data->streamData[data->streamIndex] = dat;
 	data->streamIndex += 1;
 }
@@ -58,7 +58,7 @@ void findFile(char* name, flash_file* out) {
  *  n bytes: stream data
  */
 
-void saveReplayToFile(char* name, replayData* repSt) {
+void saveReplayToFile(char* name, replay_t* repSt) {
 #ifdef DEBUG
 	writeDebugStreamLine("Killed motors, now finding file:");
 	writeDebugStreamLine(name);
@@ -90,7 +90,7 @@ void saveReplayToFile(char* name, replayData* repSt) {
 #endif
 }
 
-void loadReplayFromFile(const char* name, replayData* repSt) {
+void loadReplayFromFile(const char* name, replay_t* repSt) {
 	clearLCDLine(0);
 	clearLCDLine(1);
 #ifdef DEBUG

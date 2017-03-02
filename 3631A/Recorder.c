@@ -32,7 +32,7 @@
 #include "./RedCastle.c"
 /* Recorder control stub. */
 
-void loadAutonomous(replayData* replay) {
+void loadAutonomous(replay_t* replay) {
 	int pos = sensorValue[autoSelector];
 
 	if(pos < 727) {		// Illuminati Skills
@@ -59,7 +59,7 @@ void loadAutonomous(replayData* replay) {
 	writeDebugStreamLine("Loading done.");
 }
 
-void saveAutonomous(replayData* replay) {
+void saveAutonomous(replay_t* replay) {
 	int pos = sensorValue[autoSelector];
 
 	if(pos < 727) {		// Illuminati Skills
