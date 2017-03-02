@@ -23,12 +23,18 @@ void initReplayData(replay_t* data) {
 }
 
 unsigned char readNextByte(replay_t* data) {
+    if(data->streamIndex >= data->streamSize)
+        return 0;
+
 	unsigned char ret = data->streamData[data->streamIndex];
 	data->streamIndex += 1;
 	return ret;
 }
 
 void writeByte(replay_t* data, unsigned char dat) {
+    if(data->streamIndex > 10802)
+        return;
+
 	data->streamData[data->streamIndex] = dat;
 	data->streamIndex += 1;
 }
