@@ -1,11 +1,16 @@
 /*
- * OMGWTFBBQ.c -- Or, the Most Configurable Robot Software in the World!
+ * OMGWTFBBQ.c: or, the Most Configurable Robot Program in the World!
+ * Intended for use by teams who cannot program or build robots on time.
  *
  * Implements:
  *  - Tank drive w/ speedlimit
  *  - 3 configurable togglable attachments
  *  - 3 configurable continuously-driven (forward/back) attachments
- *  - Simple (drive-forward) autonomous
+ *  - Simple (drive forward for 5 seconds) autonomous
+ *
+ * ...all in a rapidly-reconfigurable software package!
+ * No need to actually write code, just plug in the port and button numbers,
+ * and you're set!
  */
 
 /* Drive config. */
@@ -15,23 +20,32 @@ const short speedLimit = 96;
 
 /* Configurable continuous-drive apparatus. */
 const signed short attachmentAlpha[2] = {0, 0}; // Motor ports
-const short alphaControls[2] = {0, 0};          // Joystick buttons (fwd / back)
+const short controlsAlpha[2] = {0, 0};          // Joystick buttons (fwd / back)
+const signed short fwdSpeedAlpha = 127;
+const signed short bwdSpeedAlpha = -127;
 
 const signed short attachmentBeta[2] = {0, 0};
-const short betaControls[2] = {0, 0};
+const short controlsBeta[2] = {0, 0};
+const signed short fwdSpeedBeta = 127;
+const signed short bwdSpeedBeta = -127;
 
 const signed short attachmentGamma[2] = {0, 0};
-const short gammaControls[2] = {0, 0};
+const short controlsGamma[2] = {0, 0};
+const signed short fwdSpeedGamma = 127;
+const signed short bwdSpeedGamma = -127;
 
 /* Configurable togglable apparatus. */
 const signed short attachmentEins = {0, 0}; // Motor ports
 const short toggleEins = 0;                 // Joystick button
+const signed short fwdSpeedEins = 127;
 
 const signed short attachmentZwei = {0, 0}; // Motor ports
 const short toggleZwei = 0;                 // Joystick button
+const signed short fwdSpeedZwei = 127;
 
 const signed short attachmentDrei = {0, 0}; // Motor ports
 const short toggleDrei = 0;                 // Joystick button
+const signed short fwdSpeedDrei = 127;
 
 // don't touch anything below this line:
 /******************************************************************************/
@@ -57,21 +71,21 @@ void setMotorGroup(const signed short* motorGroup, const int nMotors, signed sho
     }
 }
 
-void continuousControl(const signed short* motors, const short* controls) {
+void continuousControl(const signed short* motors, const short* controls, const signed short fwd, const signed short bwd) {
     if(readButton(controls[0])) {
-        setMotorGroup(motors, 2, 127);
+        setMotorGroup(motors, 2, fwd);
     } else if(readButton(controls[1])) {
-        setMotorGroup(motors, 2, -127);
+        setMotorGroup(motors, 2, bwd);
     } else {
         setMotorGroup(motors, 2, 0);
     }
 }
 
-void toggleControl(const signed short* motors, const short control, bool& state) {
+void toggleControl(const signed short* motors, const short control, bool& state, const signed short fwd) {
     state = readButton(control) ? !state : state;
 
     if(state) {
-        setMotorGroup(motors, 127);
+        setMotorGroup(motors, fwd);
     } else {
         setMotorGroup(motors, 0);
     }
@@ -99,13 +113,13 @@ task usercontrol() {
     while(true) {
         driveControl();
 
-        continuousControl((const signed short*)attachmentAlpha, (const short*)alphaControls);
-        continuousControl((const signed short*)attachmentBeta, (const short*)betaControls);
-        continuousControl((const signed short*)attachmentGamma, (const short*)gammaControls);
+        continuousControl((const signed short*)attachmentAlpha, (const short*)controlsAlpha, fwdSpeedAlpha, bwdSpeedAlpha);
+        continuousControl((const signed short*)attachmentBeta, (const short*)controlsBeta, fwdSpeedBeta, bwdSpeedBeta);
+        continuousControl((const signed short*)attachmentGamma, (const short*)controlsGamma, fwdSpeedGamma, bwdSpeedGamma);
 
-        toggleControl((const signed short*)attachmentEins, toggleEins);
-        toggleControl((const signed short*)attachmentZwei, toggleZwei);
-        toggleControl((const signed short*)attachmentDrei, toggleDrei);
+        toggleControl((const signed short*)attachmentEins, toggleEins, fwdSpeedEins);
+        toggleControl((const signed short*)attachmentZwei, toggleZwei, fwdSpeedZwei);
+        toggleControl((const signed short*)attachmentDrei, toggleDrei, fwdSpeedDrei);
 
         sleep(20);
     }
