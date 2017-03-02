@@ -102,6 +102,14 @@ void armControl(control_t* state) {
     }
 }
 
+void stopAllMotorsCustom() {
+    motor[leftDrivea] = motor[leftDriveb] = 0;
+    motor[rightDrivea] = motor[rightDriveb] = 0;
+    motor[ArmLa] = motor[ArmLt] = 0;
+    motor[ArmRb] = motor[ArmRt] = 0;
+    motor[clawL] = motor[clawR] = 0;
+}
+
 void controlLoopIteration(control_t* state) {
     driveControl(state);
     armControl(state);
@@ -116,6 +124,14 @@ void resetState(control_t* state) {
     state->armDown = false;
     state->clawOpen = false;
     state->clawClosed = false;
+}
+
+void initState(control_t* state) {
+    resetState(state);
+    state->clawErr = 0;
+    state->clawLErr = 0;
+    state->clawSP = clawClosedPos;
+    state->clawCrossings = 0;
 }
 
 void joystickToControl(control_t* state) {
