@@ -28,7 +28,7 @@
 
 #define DEBUG
 
-#include "./Enterprise.c"
+#include "../Enterprise.c"
 #include "./RedCastle.c"
 /* Recorder control stub. */
 
