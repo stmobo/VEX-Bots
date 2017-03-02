@@ -212,8 +212,6 @@ void controlLoopIteration() {
 	moveControl();
 }
 
-#define TEST_BIT(x, i) (((x)&(1<<(i))) > 0)
-
 void replayToControlState() {
 	currentState.yAxis = (signed char)readNextByte(&replay);
 	currentState.zAxis = (signed char)readNextByte(&replay);

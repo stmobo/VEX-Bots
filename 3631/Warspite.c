@@ -64,8 +64,9 @@ void clawControl(control_t* state) {
             }
 
             float out = (clawKp*state->clawErr);
-            if(state->clawCrossings > 0)
+            if(state->clawCrossings > 0) {
                 out /= (float)pow(2.0, state->clawCrossings);
+            }
 
             motor[clawL] = -out;
             motor[clawR] = out;
@@ -101,6 +102,22 @@ void armControl(control_t* state) {
     }
 }
 
+void controlLoopIteration(control_t* state) {
+    driveControl(state);
+    armControl(state);
+    clawControl(state);
+}
+
+void resetState(control_t* state) {
+    state->left = 0;
+    state->right = 0;
+
+    state->armUp = false;
+    state->armDown = false;
+    state->clawOpen = false;
+    state->clawClosed = false;
+}
+
 void joystickToControl(control_t* state) {
     state->left = vexRT[Ch3];
     state->right = vexRT[Ch2];
@@ -113,7 +130,26 @@ void joystickToControl(control_t* state) {
 }
 
 void replayToControl(control_t* state, replay_t* replay) {
+    state->left = (signed char)readNextByte(replay);
+    state->right = (signed char)readNextByte(replay);
 
+    unsigned char btnState = readNextByte(replay);
+    state->armUp = TEST_BIT(btnState, 0);
+    state->armDown = TEST_BIT(btnState, 1);
+    state->clawOpen = TEST_BIT(btnState, 2);
+    state->clawClosed = TEST_BIT(btnState, 3);
+}
+
+void controlToReplay(control_t* state, replay_t* replay) {
+    writeByte(replay, (unsigned char)state->left);
+    writeByte(replay, (unsigned char)state->right);
+
+    unsigned char btnState = 0;
+    btnState |= (state->armUp ? 1 : 0)      << 0;
+    btnState |= (state->armDown ? 1 : 0)    << 1;
+    btnState |= (state->clawOpen ? 1 : 0)   << 2;
+    btnState |= (state->clawClosed ? 1 : 0) << 3;
+    writeByte(replay, btnState);
 }
 
 #endif /* end of include guard: WARSPITE_C */

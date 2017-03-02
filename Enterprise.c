@@ -4,6 +4,8 @@
 const float snapshotFreq = 30; // Hz
 const float deltaT = (1/snapshotFreq) * 1000; // time between snapshots in milliseconds
 
+#define TEST_BIT(x, i) (((x)&(1<<(i))) > 0)
+
 struct replay_t {
 	unsigned char streamData[10802];
 	unsigned int streamIndex;
