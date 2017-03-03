@@ -32,34 +32,20 @@
 #include "./Akagi.c"
 /* Recorder control stub. */
 
+/* Max recording time in milliseconds.
+ *
+ *  For a regular match autonomous recording, this should be 15000 milliseconds (= 15 seconds).
+ *  For an Auto Skills recording, this should be 60000 milliseconds (= 60 seconds = 1 minute).
+ */
+unsigned int timelimit = 61000;
+
 replay_t loadedReplay;
 
-void loadAutonomous(replay_t* replay) {
-	int pos = sensorValue[autoSelector];
+unsigned int currentTime = 0;
+unsigned int replayTime = 0;
 
-	if(pos < 727) {		// Illuminati Skills
-		writeDebugStreamLine("Loading: ilmskills");
-		loadReplayFromFile("ilmskills", replay);
-	} else if(pos < 1920) {	// Illuminati routine
-		writeDebugStreamLine("Loading: ilmroutine");
-		loadReplayFromFile("ilmroutine", replay);
-	} else if(pos < 2678) {	// Off
-		return;
-	} else if(pos < 3200) {	// A1
-		writeDebugStreamLine("Loading: slot1");
-		loadReplayFromFile("slot1", replay);
-	} else if(pos < 3768) { // A2
-		writeDebugStreamLine("Loading: slot2");
-		loadReplayFromFile("slot2", replay);
-	} else if(pos > 4080) {	// A3
-		writeDebugStreamLine("Loading: slot3");
-		loadReplayFromFile("slot3", replay);
-	}
-
-	clearLCDLine(0);
-	displayLCDCenteredString(0, "Load done.");
-	writeDebugStreamLine("Loading done.");
-}
+bool recording = false;
+bool auton_mode = false;
 
 void saveAutonomous(replay_t* replay) {
 	int pos = sensorValue[autoSelector];
@@ -88,37 +74,80 @@ void saveAutonomous(replay_t* replay) {
 	writeDebugStreamLine("Saving done.");
 }
 
-void pre_auton() {
+task lcdUpdate() {
+    while(true) {
+        clearLCDLine(1);
+
+        if(currentTime > 0) {
+            int sec = currentTime / 1000;
+            int ms = currentTime % 1000;
+
+            displayLCDString(1, 0, "Time: "); // length 5 (next char at 6)
+
+            /* Displays: ss.mmm (ss = seconds, mmm = milliseconds) */
+            displayLCDNumber(1, 6, sec, 2);
+            displayLCDChar(1, 8, '.');
+            displayLCDNumber(1, 9, ms, -3);
+        }
+
+        if(recording && timelimit > 0) {
+            int sec = timelimit / 1000;
+            int ms = timelimit % 1000;
+
+            displayLCDString(1, 12, " / ");
+
+            displayLCDNumber(1, 15, sec, 2);
+            displayLCDChar(1, 17, '.');
+            displayLCDNumber(1, 18, ms, -3);
+        }
+
+        if(auton_mode && replayTime > 0) {
+            int sec = replayTime / 1000;
+            int ms = replayTime % 1000;
+
+            displayLCDString(1, 12, " / ");
+
+            displayLCDNumber(1, 15, sec, 2);
+            displayLCDChar(1, 17, '.');
+            displayLCDNumber(1, 18, ms, -3);
+        }
+
+        sleep(deltaT);
+    }
 }
 
+void pre_auton() {}
+
 task autonomous() {
-  control_t state;
+    control_t state;
 
 	initReplayData(&loadedReplay);
-  initState(&state);
+    initState(&state);
 	loadAutonomous(&loadedReplay);
+
+    auton_mode = true;
+    recording = false;
+    replayTime = getReplayTime(&loadedReplay);
+    currentTime = 0;
+
+    startTask(lcdUpdate);
 
 	while(loadedReplay.streamIndex < loadedReplay.streamSize) {
 		replayToControlState(&state, &loadedReplay);
 		controlLoopIteration(&state);
+
+        currentTime += (int)deltaT;
+
 		sleep((int)deltaT);
 	}
 
+    stopTask(lcdUpdate);
 	stopAllMotorsCustom();
 }
 
-unsigned int currentTime = 0;
-
-/* Max recording time in milliseconds.
- *
- *  For a regular match autonomous recording, this should be 15000 milliseconds (= 15 seconds).
- *  For an Auto Skills recording, this should be 60000 milliseconds (= 60 seconds = 1 minute).
- */
-unsigned int timelimit = 61000;
-
 task usercontrol()
 {
-  control_t state;
+    control_t state;
 
 	initState(&state);
 	initReplayData(&loadedReplay);
@@ -145,10 +174,15 @@ task usercontrol()
 	}
 
 	clearLCDLine(0);
-	clearLCDLine(1);
 	displayLCDCenteredString(0, "Recording...");
 
+    recording = true;
+    auton_mode = false;
+    replayTime = 0;
+    currentTime = 0;
+
     resetState(&state);
+    startTask(lcdUpdate);
 
 	while (true)
 	{
@@ -160,7 +194,6 @@ task usercontrol()
 		}
 
 		currentTime += (int)deltaT;
-
 
 		if(vexRT[Btn7R]) {
 			break;
@@ -177,6 +210,7 @@ task usercontrol()
 	loadedReplay.streamSize = loadedReplay.streamIndex+1;
 
 	stopAllMotorsCustom();
+    stopTask(lcdUpdate);
 
 	bool doSave = false;
 	while(true) {

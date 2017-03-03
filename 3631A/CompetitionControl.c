@@ -30,49 +30,65 @@
 #include "./Akagi.c"
 /* Competition control stub. */
 
+bool enableLCD = true;
+
 control_t state;
 replay_t replay;
 
-void loadAutonomous(replayData* replay) {
-	int pos = sensorValue[autoSelector];
+int currentTime = 0;
+int replayTime = 0;
 
-	if(pos < 727) {		// Illuminati Skills
-		writeDebugStreamLine("Loading: ilmskills");
-		loadReplayFromFile("ilmskills", replay);
-	} else if(pos < 1920) {	// Illuminati routine
-		writeDebugStreamLine("Loading: ilmroutine");
-		loadReplayFromFile("ilmroutine", replay);
-	} else if(pos < 2678) {	// Off
-		return;
-	} else if(pos < 3200) {	// A1
-		writeDebugStreamLine("Loading: slot1");
-		loadReplayFromFile("slot1", replay);
-	} else if(pos < 3768) { // A2
-		writeDebugStreamLine("Loading: slot2");
-		loadReplayFromFile("slot2", replay);
-	} else if(pos > 4080) {	// A3
-		writeDebugStreamLine("Loading: slot3");
-		loadReplayFromFile("slot3", replay);
-	}
+task lcdUpdate() {
+    while(true) {
+        clearLCDLine(1);
 
-	clearLCDLine(0);
-	displayLCDCenteredString(0, "Load done.");
-	writeDebugStreamLine("Loading done.");
+        if(currentTime > 0) {
+            int sec = currentTime / 1000;
+            int ms = currentTime % 1000;
+
+            displayLCDString(1, 0, "Time: "); // length 5 (next char at 6)
+
+            /* Displays: ss.mmm (ss = seconds, mmm = milliseconds) */
+            displayLCDNumber(1, 6, sec, 2);
+            displayLCDChar(1, 8, '.');
+            displayLCDNumber(1, 9, sec, -3);
+        }
+
+        if(replayTime > 0) {
+            int sec = replayTime / 1000;
+            int ms = replayTime % 1000;
+
+            displayLCDString(1, 12, " / ");
+
+            displayLCDNumber(1, 15, sec, 2);
+            displayLCDChar(1, 17, '.');
+            displayLCDNumber(1, 18, sec, -3);
+        }
+
+        sleep(deltaT);
+    }
 }
 
-void pre_auton()
-{
-	loadReplayFromFile(compFilename, &replay);
+void pre_auton() {
+    initReplayData(&replay);
+    loadAutonomous(&replay);
+	initState(&state);
+
+    if(enableLCD) {
+        startTask(lcdUpdate);
+    }
 }
 
 task autonomous() {
-    initReplayData(&replay);
-    loadAutonomous(&replay);
+    currentTime = 0;    // current elapsed milliseconds
+    replayTime = getReplayTime(&replay);
 
-	initState(&state);
 	while(replay.streamIndex < replay.streamSize) {
 		replayToControlState(&state, &replay);
 		controlLoopIteration(&state);
+
+        currentTime += (int)deltaT;
+
 		sleep((int)deltaT);
 	}
 
@@ -83,10 +99,16 @@ task usercontrol()
 {
 	resetState(&state);
 
+    currentTime = 0;
+    replayTime = 0;
+
 	while (true)
 	{
 		controllerToControlState(&state);
 		controlLoopIteration(&state);
+
+        currentTime += (int)deltaT;
+
 		sleep((int)deltaT);
 	}
 }

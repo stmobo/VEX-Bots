@@ -275,4 +275,58 @@ void controlStateToReplay(control_t* state, replay_t* replay) {
 	writeByte(replay, buttonState);
 }
 
+int getReplayTime(replay_t* replay) {
+    if(replay->streamSize > 0) {
+        int nReplayFrames = (replay->streamSize - 2) / 3;
+        return nReplayFrames * deltaT;
+    }
+
+    return 0;
+}
+
+void loadAutonomous(replay_t* replay) {
+	int pos = sensorValue[autoSelector];
+
+	if(pos < 727) {		// Illuminati Skills
+		writeDebugStreamLine("Loading: ilmskills");
+		loadReplayFromFile("ilmskills", replay);
+
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: Ilm. Skills");
+	} else if(pos < 1920) {	// Illuminati routine
+		writeDebugStreamLine("Loading: ilmroutine");
+		loadReplayFromFile("ilmroutine", replay);
+
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: Ilm. Routine");
+	} else if(pos < 2678) {	// Off
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: None");
+
+		return;
+	} else if(pos < 3200) {	// A1
+		writeDebugStreamLine("Loading: slot1");
+		loadReplayFromFile("slot1", replay);
+
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: Slot 1");
+	} else if(pos < 3768) { // A2
+		writeDebugStreamLine("Loading: slot2");
+		loadReplayFromFile("slot2", replay);
+
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: Slot 2");
+	} else if(pos > 4080) {	// A3
+		writeDebugStreamLine("Loading: slot3");
+		loadReplayFromFile("slot3", replay);
+
+        clearLCDLine(0);
+        displayLCDCenteredString(0, "Auto: Slot 3");
+	}
+
+	clearLCDLine(1);
+	displayLCDCenteredString(1, "Load done.");
+	writeDebugStreamLine("Loading done.");
+}
+
 #endif /* end of include guard: AKAGI_C */
