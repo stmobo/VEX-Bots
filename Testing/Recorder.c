@@ -17,21 +17,23 @@
 
 replay_t replay;
 
-void pre_auton() {}
+//void pre_auton() {}
 
 task autonomous() {
-    control_t state;
+	if(bIfiAutonomousMode) {
+	    control_t state;
 
-    initReplayData(&replay);
+	    initReplayData(&replay);
 
-    loadReplayFromFile("replay", &replay);
+	    loadReplayFromFile("replay", &replay);
 
-    while(1) {
-        replayToControl(&state, &replay);
-        controlToMotors(state);
+	    while(1) {
+	        replayToControl(&state, &replay);
+	        controlToMotors(state);
 
-        sleep(deltaT);
-    }
+	        sleep(deltaT);
+	    }
+	  }
 }
 
 task usercontrol() {
@@ -44,12 +46,36 @@ task usercontrol() {
         controlToMotors(state);
         controlToReplay(state, &replay);
 
-        if(vexRT[Btn7L]) {
+        if(vexRT[Btn7R]) {
             break;
         }
 
         sleep(deltaT);
     }
+
+    stopAllMotorsCustom();
+
+    bool doSave = false;
+	while(true) {
+		displayLCDCenteredString(0, "Save replay?");
+		if(!doSave) {
+			displayLCDCenteredString(1, "[No] Yes ");
+		} else {
+			displayLCDCenteredString(1, " No [Yes]");
+		}
+
+		if(nLCDButtons & 0x01) {
+			doSave = false;
+		} else if(nLCDButtons & 0x02) {
+			break;
+		} else if(nLCDButtons & 0x04) {
+			doSave = true;
+		}
+	}
+
+	if(doSave) {
+		saveAutonomous(&loadedReplay);
+	}
 
     saveReplayToFile("replay", &replay);
 }
