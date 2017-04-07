@@ -284,24 +284,18 @@ int getReplayTime(replay_t* replay) {
     return 0;
 }
 
+bool doingReplayAuton = true;
+
 void loadAutonomous(replay_t* replay) {
 	int pos = sensorValue[autoSelector];
 
 	if(pos < 727) {		// Illuminati Skills
-		writeDebugStreamLine("Loading: ilmskills");
-		loadReplayFromFile("ilmskills", replay);
-
-        clearLCDLine(0);
-        displayLCDCenteredString(0, "Auto: Ilm. Skills");
+		doingReplayAuton = false;
 	} else if(pos < 1920) {	// Illuminati routine
-		writeDebugStreamLine("Loading: ilmroutine");
-		loadReplayFromFile("ilmroutine", replay);
-
-        clearLCDLine(0);
-        displayLCDCenteredString(0, "Auto: Ilm. Routine");
+		doingReplayAuton = false;
 	} else if(pos < 2678) {	// Off
-        clearLCDLine(0);
-        displayLCDCenteredString(0, "Auto: None");
+   		 clearLCDLine(0);
+   		 displayLCDCenteredString(0, "Auto: None");
 
 		return;
 	} else if(pos < 3200) {	// A1
