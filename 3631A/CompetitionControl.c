@@ -31,7 +31,7 @@
 #include "../RobotCLibs/gyroLib/gyroLib2.c"
 /* Competition control stub. */
 
-bool enableLCD = true;
+bool enableLCD = false;
 
 control_t state;
 replay_t replay;
@@ -82,7 +82,7 @@ task lcdUpdate2() {
 
 
 void pre_auton() {
-		bStopTasksBetweenModes = true;
+	bStopTasksBetweenModes = true;
 
     initReplayData(&replay);
     loadAutonomous(&replay);
@@ -93,15 +93,16 @@ void pre_auton() {
         startTask(lcdUpdate);
     }
 
-    /*
+
     SensorValue[gyroSens] = 0;
+    /*
     GyroInit(gyroSens);
     */
 }
 
 const float wheelDiameter = 4.0; //in
 const float wheelCirc = wheelDiameter*PI; // in/rev
-const float encConv = 627.5; // ticks/rev
+const float encConv = 392.0; // ticks/rev
 const float ticksPerInch = (encConv / wheelCirc);
 
 const int leftEncCoeff = -1;
@@ -109,21 +110,29 @@ const int rightEncCoeff = 1;
 const int gyroCoeff = -1;
 
 const int encDeadband = 20;
-const float gyroThreshold = 2.50;
+const int gyroThreshold = 50;
 
-const short driveSpeed = 45;
+//const short driveSpeed = 45;
 const short turnSpeed = 65;
 
-void driveStraightLine(float inches) {
+int getLeftEncoder() {
+	return (SensorValue[leftEnc]*leftEncCoeff);
+}
+
+int getRightEncoder() {
+	return (SensorValue[rightEnc]*rightEncCoeff);
+}
+
+void driveStraightLine(float inches, short driveSpeed=45) {
 	short ticks = (inches * ticksPerInch);
 
 	SensorValue[leftEnc] = 0;
 	SensorValue[rightEnc] = 0;
 
-	while( (abs(SensorValue[leftEnc]-ticks) > encDeadband) &&
-				 (abs(SensorValue[rightEnc]-ticks) > encDeadband)) {
-		if(abs(SensorValue[leftEnc]-ticks) > encDeadband) {
-			if(SensorValue[leftEnc] < ticks) {
+	while( (abs(getLeftEncoder()-ticks) > encDeadband) &&
+				 (abs(getRightEncoder()-ticks) > encDeadband)) {
+		if(abs(getLeftEncoder()-ticks) > encDeadband) {
+			if(getLeftEncoder() < ticks) {
 				motor[LFront] = motor[LBack] = -driveSpeed;
 			} else {
 				motor[LFront] = motor[LBack] = driveSpeed;
@@ -132,8 +141,8 @@ void driveStraightLine(float inches) {
 			motor[LFront] = motor[LBack] = 0;
 		}
 
-		if(abs(SensorValue[rightEnc]-ticks) > encDeadband) {
-			if(SensorValue[rightEnc] < ticks) {
+		if(abs(getRightEncoder()-ticks) > encDeadband) {
+			if(getRightEncoder() < ticks) {
 				motor[RFront] = motor[RBack] = -driveSpeed;
 			} else {
 				motor[RFront] = motor[RBack] = driveSpeed;
@@ -149,7 +158,31 @@ void driveStraightLine(float inches) {
 	motor[RFront] = motor[RBack] = 0;
 }
 
+
+int getGyroAngle() {
+	//float raw = gyroCoeff*SensorValue[gyroSens];
+	//return raw / 10.0;
+	return gyroCoeff*SensorValue[gyroSens];
+}
+
+void turnArbitraryAngle(int angle) {
+	while(abs(getGyroAngle() - angle) > gyroThreshold) {
+		if(getGyroAngle() < angle) {
+			motor[LFront] = motor[LBack] = -turnSpeed;
+			motor[RFront] = motor[RBack] = turnSpeed;
+		} else {
+			motor[LFront] = motor[LBack] = turnSpeed;
+			motor[RFront] = motor[RBack] = -turnSpeed;
+		}
+		sleep(25);
+	}
+
+	motor[LFront] = motor[LBack] = 0;
+ 	motor[RFront] = motor[RBack] = 0;
+}
+
 void turn90Right() {
+	/*
 	motor[LFront] = motor[LBack] = -turnSpeed;
  	motor[RFront] = motor[RBack] = turnSpeed;
 
@@ -157,9 +190,12 @@ void turn90Right() {
 
  	motor[LFront] = motor[LBack] = 0;
  	motor[RFront] = motor[RBack] = 0;
+	*/
+	turnArbitraryAngle(getGyroAngle()+900);
 }
 
 void turn90Left() {
+	/*
 	motor[LFront] = motor[LBack] = turnSpeed;
  	motor[RFront] = motor[RBack] = -turnSpeed;
 
@@ -167,6 +203,8 @@ void turn90Left() {
 
  	motor[LFront] = motor[LBack] = 0;
  	motor[RFront] = motor[RBack] = 0;
+	*/
+	turnArbitraryAngle(getGyroAngle()-900);
 }
 
 void primeCat() {
@@ -191,85 +229,152 @@ void slightRaiseCat() {
 	catapultStop();
 }
 
+
+/* Robot ends up with catapult out and on the white line. */
+void unlatch() {
+	int travelDist = (ticksPerInch)*(33.0); // 2ft 9in (1+3/4 of a tile)
+	driveStraightLine(-24.0, 127);
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = -127;
+	sleep(275);
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 0;
+	/*
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 127;
+	while(getRightEncoder() < travelDist) { sleep(25); };
+	*/
+	
+	/*
+	sleep(1500);
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = -127;
+	sleep(450);
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 127;
+	sleep(250);
+	motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 0;
+	*/
+}
+
 task autonomous() {
-		if(doingReplayAuton) {
-	    currentTime = 0;    // current elapsed milliseconds
-	    replayTime = getReplayTime(&replay);
+	if(doingReplayAuton) {
+		currentTime = 0;    // current elapsed milliseconds
+		replayTime = getReplayTime(&replay);
 
-			while(replay.streamIndex < replay.streamSize) {
-				replayToControlState(&state, &replay);
-				controlLoopIteration(&state);
+		while(replay.streamIndex < replay.streamSize) {
+			replayToControlState(&state, &replay);
+			controlLoopIteration(&state);
 
-		    currentTime += (int)deltaT;
+			currentTime += (int)deltaT;
 
-				sleep((int)deltaT);
-			}
-		} else {
-			if(SensorValue[autoSelector] < 727) {
-				/* Destick routine. */
-				motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = -127;
-				sleep(900);
-				motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 127;
-				sleep(250);
-				motor[LFront] = motor[LBack] = motor[RFront] = motor[RBack] = 0;
-
-				sleep(250);
-
-				/* Main auton routine. */
-				//driveStraightLine(22.625);
-				turn90Right();//driveTurn(90.0);
-				sleep(250);
-
-				primeCat();
-				sleep(250);
-
-				driveStraightLine(24.0);
-				sleep(250);
-
-				slightRaiseCat();
-				sleep(250);
-
-				turn90Right();//driveTurn(180.0);
-				sleep(250);
-
-				primeCat();
-				fireCat();
-				sleep(250);
-
-				turn90Left();//driveTurn(90.0);
-				sleep(250);
-
-				primeCat();
-				sleep(250);
-
-				driveStraightLine(48.0);
-				sleep(250);
-
-				turn90Right();
-				sleep(250);
-				//driveTurn(180.0);
-				driveStraightLine(6.0);
-				sleep(250);
-
-				slightRaiseCat();
-				sleep(250);
-				driveStraightLine(-6.0);
-				sleep(250);
-				primeCat();
-				fireCat();
-				sleep(250);
-			}/* else if(SensorValue[autoSelector] < 1920) {
-					primeCat();
-					sleep(1500);
-					fireCat();
-			}*/
+			sleep((int)deltaT);
 		}
+	} else {
+		if(SensorValue[autoSelector] < 727) { // Ilm. Skills Auton
+			unlatch();
+			sleep(250);
+			
+			//rn90Right();
+			//rn90Right();
+			//eep(250);
+			
+			driveStraightLine(12.0);
+			
+			fireCat();
+			primeCat();			
+			sleep(250);
 
-		stopAllMotorsCustom();
+			return;
+			
+			/* Main auton routine. */
+			//driveStraightLine(22.625);
+			turn90Left();//driveTurn(90.0);
+			sleep(250);
+
+			primeCat();
+			sleep(250);
+
+			driveStraightLine(24.0);
+			sleep(250);
+
+			slightRaiseCat();
+			sleep(250);
+
+			turn90Right();//driveTurn(180.0);
+			sleep(250);
+			
+			driveStraightLine(-6.0);
+
+			primeCat();
+			fireCat();
+			sleep(250);
+			
+			driveStraightLine(6.0);
+			sleep(250);
+			
+			turn90Left();//driveTurn(90.0);
+			sleep(250);
+			
+			return;
+
+			primeCat();
+			sleep(250);
+
+			driveStraightLine(48.0);
+			sleep(250);
+
+			turn90Right();
+			sleep(250);
+			//driveTurn(180.0);
+			driveStraightLine(6.0);
+			sleep(250);
+
+			slightRaiseCat();
+			sleep(250);
+			driveStraightLine(-6.0);
+			sleep(250);
+			primeCat();
+			fireCat();
+			sleep(250);
+		} else if(SensorValue[autoSelector] < 1920) { // Ilm. Auton
+			//turnArbitraryAngle(getGyroAngle()+200);
+			unlatch();
+			fireCat();
+			
+			for(int i=0;i<3;i++) {
+				primeCat();			
+				sleep(750);
+				fireCat();
+			}
+			
+			sleep(250);
+			turnArbitraryAngle(getGyroAngle()-200);
+			sleep(500);
+			
+			for(int i=0;i<2;i++) {
+				primeCat();
+				
+				sleep(750);
+				
+				slightRaiseCat();
+				driveStraightLine(-30.0);
+				
+				sleep(250);
+				primeCat();
+				fireCat();
+				
+				sleep(250);
+				driveStraightLine(30.0);
+			}
+			
+		}
+	}
+
+	stopAllMotorsCustom();
 }
 
 task usercontrol()
 {
+	if(enableLCD) {
+        startTask(lcdUpdate);
+    }
+
 	resetState(&state);
 
     currentTime = 0;
